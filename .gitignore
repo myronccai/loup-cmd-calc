@@ -3,3 +3,6 @@
 
 # Loup toolchain scratch files (partial IR from failed native builds)
 /.temp/
+
+# Stage0 build cache (Wasm builds)
+/.loup-cache/

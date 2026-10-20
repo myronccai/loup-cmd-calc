@@ -1,0 +1,250 @@
+@mode(host.dual)
+
+# A Pratt parser (top-down operator precedence). Each operator has a binding
+# power; parse_expr(min_bp) keeps folding operators into the left operand
+# while the next operator binds at least as tightly as min_bp.
+#
+#   operators           left bp  right bp
+#   == != < <= > >=     10       11        left-associative
+#   + -                 20       21        left-associative
+#   * / %               30       31        left-associative
+#   unary - +            -       40        prefix
+#   ^                   51       50        right-associative
+#   !                   60        -        postfix
+#
+# So -2^2 is -(2^2), 2^3^2 is 2^(3^2), and 2^-1 is 2^(-1).
+#
+# Errors are Err(message); the column of the offending token is kept in the
+# parser (error_col), since native builds of Loup 1.26.0 misread a struct
+# carried in Err next to an enum Ok type.
+
+from engine.lexer import (Token, TokenKind, tokenize);
+from engine.ast import (Node, Stmt);
+
+const PREFIX_BP: int = 40;
+const POSTFIX_BP: int = 60;
+# Deeper nesting than this is refused before it can exhaust the stack.
+pub const MAX_NESTING: int = 64;
+
+pub struct Parser {
+    pub tokens: list[Token];
+    pub var pos: int;
+    pub var depth: int;
+    pub var error_col: int;
+}
+
+# A parsed line, or a syntax error at a 1-based column.
+pub struct Parsed {
+    pub stmts: list[Stmt];
+    pub error: string;
+    pub col: int;
+}
+
+func peek(p: Parser): Token {
+    return p.tokens[p.pos];
+}
+
+func advance(edits p: Parser): Token {
+    let t = p.tokens[p.pos];
+    if (p.pos < p.tokens.len() - 1) {
+        p.pos += 1;
+    }
+    return t;
+}
+
+# Records where an error happened and returns its message.
+func fail(edits p: Parser, t: Token, message: string): string {
+    p.error_col = t.col;
+    return message;
+}
+
+func describe(t: Token): string {
+    if (t.kind == TokenKind.End) {
+        return "end of input";
+    }
+    return "'" + t.text + "'";
+}
+
+func unexpected(edits p: Parser, t: Token): string {
+    return fail(edits: p, t, "unexpected " + describe(t));
+}
+
+# Left binding power of an infix operator, or -1 when `op` is not one.
+pub func infix_left_bp(op: string): int {
+    return match op {
+        "==" => 10,
+        "!=" => 10,
+        "<" => 10,
+        "<=" => 10,
+        ">" => 10,
+        ">=" => 10,
+        "+" => 20,
+        "-" => 20,
+        "*" => 30,
+        "/" => 30,
+        "%" => 30,
+        "^" => 51,
+        _ => 0 - 1,
+    };
+}
+
+pub func infix_right_bp(op: string): int {
+    if (op == "^") {
+        return 50;
+    }
+    return infix_left_bp(op) + 1;
+}
+
+func parse_call_args(edits p: Parser, name: string): Result[Node, string] {
+    var args: list[Node] = [];
+    if (peek(p).kind == TokenKind.RParen) {
+        advance(edits: p);
+        return Ok(Node.Call(name = name, args = args));
+    }
+    while (true) {
+        let arg = parse_expr(edits: p, 0)?;
+        args.push(arg);
+        let t = advance(edits: p);
+        if (t.kind == TokenKind.RParen) {
+            return Ok(Node.Call(name = name, args = args));
+        }
+        if (t.kind != TokenKind.Comma) {
+            return Err(fail(edits: p, t, "expected ',' or ')' but found " + describe(t)));
+        }
+    }
+    return Err(fail(edits: p, peek(p), "unreachable"));
+}
+
+# The prefix position: a number, a name, a call, a parenthesised expression
+# or a unary operator.
+func parse_prefix(edits p: Parser): Result[Node, string] {
+    let t = advance(edits: p);
+    if (t.kind == TokenKind.Number) {
+        return Ok(Node.Num(value = t.value));
+    }
+    if (t.kind == TokenKind.Name) {
+        if (peek(p).kind == TokenKind.LParen) {
+            advance(edits: p);
+            return parse_call_args(edits: p, t.text);
+        }
+        return Ok(Node.Var(name = t.text));
+    }
+    if (t.kind == TokenKind.LParen) {
+        let inner = parse_expr(edits: p, 0)?;
+        let close = advance(edits: p);
+        if (close.kind != TokenKind.RParen) {
+            return Err(fail(edits: p, close, "expected ')' but found " + describe(close)));
+        }
+        return Ok(inner);
+    }
+    if (t.kind == TokenKind.Op and t.text == "-") {
+        let operand = parse_expr(edits: p, PREFIX_BP)?;
+        return Ok(Node.Neg(operand = operand));
+    }
+    if (t.kind == TokenKind.Op and t.text == "+") {
+        return parse_expr(edits: p, PREFIX_BP);
+    }
+    return Err(unexpected(edits: p, t));
+}
+
+pub func parse_expr(edits p: Parser, min_bp: int): Result[Node, string] {
+    if (p.depth >= MAX_NESTING) {
+        return Err(fail(edits: p, peek(p), "expression nested too deeply"));
+    }
+    p.depth += 1;
+    var left = parse_prefix(edits: p)?;
+    while (true) {
+        let t = peek(p);
+        if (t.kind != TokenKind.Op) {
+            break;
+        }
+        if (t.text == "!") {
+            if (POSTFIX_BP < min_bp) {
+                break;
+            }
+            advance(edits: p);
+            left = Node.Factorial(operand = left);
+            continue;
+        }
+        let left_bp = infix_left_bp(t.text);
+        if (left_bp < min_bp) {
+            break;
+        }
+        advance(edits: p);
+        let right = parse_expr(edits: p, infix_right_bp(t.text))?;
+        left = Node.Binary(op = t.text, left = left, right = right);
+    }
+    p.depth -= 1;
+    return Ok(left);
+}
+
+# `NAME = EXPR` or `NAME(PARAMS) = EXPR`: the target was parsed as an
+# expression; turn it into an assignment or a definition.
+func parse_assignment(edits p: Parser, target: Node, eq: Token): Result[Stmt, string] {
+    match target {
+        Node.Var(name) => {
+            let value = parse_expr(edits: p, 0)?;
+            return Ok(Stmt.Assign(name = name, value = value));
+        },
+        Node.Call(name, args) => {
+            var params: list[string] = [];
+            for (arg in args) {
+                match arg {
+                    Node.Var(param) => {
+                        if (params.contains(param)) {
+                            return Err(fail(edits: p, eq, "duplicate parameter '" + param + "'"));
+                        }
+                        params.push(param);
+                    },
+                    _ => {
+                        return Err(fail(edits: p, eq, "parameters of '" + name + "' must be names"));
+                    },
+                }
+            }
+            let body = parse_expr(edits: p, 0)?;
+            return Ok(Stmt.Define(name = name, params = params, body = body));
+        },
+        _ => {
+            return Err(fail(edits: p, eq, "cannot assign to an expression"));
+        },
+    }
+}
+
+func parse_statement(edits p: Parser): Result[Stmt, string] {
+    let expr = parse_expr(edits: p, 0)?;
+    let t = peek(p);
+    if (t.kind == TokenKind.Assign) {
+        advance(edits: p);
+        return parse_assignment(edits: p, expr, t);
+    }
+    return Ok(Stmt.Show(expr = expr));
+}
+
+# Parses one line: statements separated by `;`.
+pub func parse_line(line: string): Parsed {
+    var stmts: list[Stmt] = [];
+    let lexed = tokenize(line);
+    if (lexed.error.len() > 0) {
+        return Parsed(stmts = stmts, error = lexed.error, col = lexed.col);
+    }
+    var p = Parser(tokens = lexed.tokens, pos = 0, depth = 0, error_col = 0);
+    while (true) {
+        while (peek(p).kind == TokenKind.Semi) {
+            advance(edits: p);
+        }
+        if (peek(p).kind == TokenKind.End) {
+            break;
+        }
+        let stmt = parse_statement(edits: p);
+        if (stmt.is_err()) {
+            return Parsed(stmts = stmts, error = stmt.unwrap_err(), col = p.error_col);
+        }
+        stmts.push(stmt.unwrap());
+        let t = peek(p);
+        if (t.kind != TokenKind.Semi and t.kind != TokenKind.End) {
+            let message = unexpected(edits: p, t);
+            return Parsed(stmts = stmts, error = message, col = p.error_col);
+        }
+    }
+    return Parsed(stmts = stmts, error = "", col = 0);
+}

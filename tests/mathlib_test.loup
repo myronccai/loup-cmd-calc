@@ -1,0 +1,80 @@
+@mode(host.dual)
+
+# The elementary functions agree with the correctly rounded values to within
+# a few units in the last place.
+
+from debug.assert import (expect, expectEq);
+from engine.mathlib import (PI, E, exp, ln, log10, sin, cos, tan, atan, pow_int, factorial, round_half_away, trunc, is_whole, is_nan, is_inf);
+
+func near(got: float, want: float, label: string): void {
+    var diff = got - want;
+    if (diff < 0.0) {
+        diff = 0.0 - diff;
+    }
+    var scale = want;
+    if (scale < 0.0) {
+        scale = 0.0 - scale;
+    }
+    if (scale < 1.0) {
+        scale = 1.0;
+    }
+    expect(diff <= 4e-16 * scale, label + ": got " + str(got) + ", want " + str(want));
+}
+
+func test_exp(): void {
+    expectEq(exp(0.0), 1.0, "exp(0)");
+    near(exp(1.0), 2.718281828459045, "exp(1)");
+    near(exp(-1.0), 0.36787944117144233, "exp(-1)");
+    near(exp(10.0), 22026.465794806718, "exp(10)");
+    near(exp(-20.0), 2.061153622438558e-09, "exp(-20)");
+    expect(is_inf(exp(710.0)), "overflow");
+    expectEq(exp(-800.0), 0.0, "underflow");
+}
+
+func test_ln(): void {
+    expectEq(ln(1.0), 0.0, "ln(1)");
+    near(ln(E), 1.0, "ln(e)");
+    near(ln(10.0), 2.302585092994046, "ln(10)");
+    near(ln(0.5), -0.6931471805599453, "ln(0.5)");
+    near(ln(1e-300), -690.7755278982137, "ln(1e-300)");
+    near(log10(1000.0), 3.0, "log10(1000)");
+}
+
+func test_sin_cos_tan(): void {
+    expectEq(sin(0.0), 0.0, "sin(0)");
+    near(sin(PI / 6.0), 0.5, "sin(pi/6)");
+    near(sin(1.0), 0.8414709848078965, "sin(1)");
+    near(sin(100.0), -0.5063656411097588, "sin(100)");
+    near(cos(1.0), 0.5403023058681398, "cos(1)");
+    near(cos(PI), -1.0, "cos(pi)");
+    near(tan(1.0), 1.5574077246549023, "tan(1)");
+    expect(is_nan(sin(1e308 * 10.0)), "sin(inf)");
+}
+
+func test_atan(): void {
+    expectEq(atan(0.0), 0.0, "atan(0)");
+    near(atan(1.0), PI / 4.0, "atan(1)");
+    near(atan(0.3), 0.2914567944778671, "atan(0.3)");
+    near(atan(-10.0), -1.4711276743037347, "atan(-10)");
+}
+
+func test_pow_int(): void {
+    expectEq(pow_int(2.0, 10.0), 1024.0, "2^10");
+    expectEq(pow_int(2.0, -3.0), 0.125, "2^-3");
+    expectEq(pow_int(-3.0, 3.0), -27.0, "(-3)^3");
+    expectEq(pow_int(5.0, 0.0), 1.0, "x^0");
+}
+
+func test_factorial(): void {
+    expectEq(factorial(0.0), 1.0, "0!");
+    expectEq(factorial(10.0), 3628800.0, "10!");
+    expect(is_inf(factorial(171.0)), "171! overflows");
+}
+
+func test_rounding(): void {
+    expectEq(round_half_away(2.5), 3.0, "2.5");
+    expectEq(round_half_away(-2.5), -3.0, "-2.5");
+    expectEq(round_half_away(0.49999999999999994), 0.0, "just below a half");
+    expectEq(trunc(-2.7), -2.0, "trunc");
+    expect(is_whole(3.0) and !is_whole(3.5), "is_whole");
+}

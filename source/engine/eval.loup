@@ -1,0 +1,333 @@
+@mode(host.dual)
+
+# The evaluator: walks the syntax tree with a session that holds variables
+# and user-defined functions. Failures (division by zero, an undefined name,
+# a domain error) are Err values, not exceptions.
+
+from engine.ast import (Node, Stmt);
+from engine.parser import (parse_line);
+from engine.format import (format_number);
+from engine.mathlib import (PI, E, abs, round_half_away, trunc, is_whole, exp, ln, log10, sin, cos, tan, atan, pow_int, factorial);
+from core.math import (floor, ceil, sqrt);
+
+# Nested user-function calls allowed before "recursion too deep".
+pub const MAX_CALL_DEPTH: int = 200;
+
+pub struct UserFunc {
+    pub params: list[string];
+    pub body: Node;
+}
+
+pub struct Session {
+    pub var precision: int;
+    pub var vars: dict[string, float];
+    pub var funcs: dict[string, UserFunc];
+}
+
+# The outcome of one line: the printed values, then an error if a statement
+# failed (statements after it on the line are not run). `col` is the column
+# of a syntax error, 0 for an evaluation error.
+pub struct LineResult {
+    pub outputs: list[string];
+    pub error: string;
+    pub col: int;
+}
+
+pub func new_session(precision: int): Session {
+    var vars: dict[string, float] = {};
+    vars["ans"] = 0.0;
+    let funcs: dict[string, UserFunc] = {};
+    return Session(precision = precision, vars = vars, funcs = funcs);
+}
+
+const BUILTINS: string = " abs ceil floor round trunc sqrt exp ln log sin cos tan atan min max if ";
+
+pub func is_builtin(name: string): bool {
+    return BUILTINS.index_of(" " + name + " ") >= 0;
+}
+
+func is_reserved_name(name: string): bool {
+    return name == "pi" or name == "e" or name == "ans";
+}
+
+func lookup(s: Session, name: string, locals: dict[string, float]): Result[float, string] {
+    if (locals.containsKey(name)) {
+        return Ok(locals[name]);
+    }
+    if (name == "pi") {
+        return Ok(PI);
+    }
+    if (name == "e") {
+        return Ok(E);
+    }
+    if (s.vars.containsKey(name)) {
+        return Ok(s.vars[name]);
+    }
+    return Err("undefined variable '" + name + "'");
+}
+
+func truth(b: bool): float {
+    if (b) {
+        return 1.0;
+    }
+    return 0.0;
+}
+
+pub func power(base: float, exponent: float): Result[float, string] {
+    if (is_whole(exponent)) {
+        if (base == 0.0 and exponent < 0.0) {
+            return Err("division by zero");
+        }
+        return Ok(pow_int(base, exponent));
+    }
+    if (base < 0.0) {
+        return Err("fractional power of a negative number");
+    }
+    if (base == 0.0) {
+        if (exponent < 0.0) {
+            return Err("division by zero");
+        }
+        return Ok(0.0);
+    }
+    return Ok(exp(exponent * ln(base)));
+}
+
+pub func binary(op: string, a: float, b: float): Result[float, string] {
+    if (op == "+") {
+        return Ok(a + b);
+    }
+    if (op == "-") {
+        return Ok(a - b);
+    }
+    if (op == "*") {
+        return Ok(a * b);
+    }
+    if (op == "/" or op == "%") {
+        if (b == 0.0) {
+            return Err("division by zero");
+        }
+        if (op == "/") {
+            return Ok(a / b);
+        }
+        return Ok(a % b);
+    }
+    if (op == "^") {
+        return power(a, b);
+    }
+    if (op == "==") {
+        return Ok(truth(a == b));
+    }
+    if (op == "!=") {
+        return Ok(truth(a != b));
+    }
+    if (op == "<") {
+        return Ok(truth(a < b));
+    }
+    if (op == "<=") {
+        return Ok(truth(a <= b));
+    }
+    if (op == ">") {
+        return Ok(truth(a > b));
+    }
+    if (op == ">=") {
+        return Ok(truth(a >= b));
+    }
+    return Err("unknown operator '" + op + "'");
+}
+
+func arity_error(name: string, expected: string, got: int): string {
+    var noun = " arguments";
+    if (expected == "1" or expected.endsWith(" 1")) {
+        noun = " argument";
+    }
+    return name + "() takes " + expected + noun + ", got " + str(got);
+}
+
+# A built-in function other than `if`, applied to evaluated arguments.
+pub func call_builtin(name: string, args: list[float]): Result[float, string] {
+    if (name == "min" or name == "max") {
+        if (args.len() == 0) {
+            return Err(arity_error(name, "at least 1", 0));
+        }
+        var best = args[0];
+        for (v in args) {
+            if ((name == "min" and v < best) or (name == "max" and v > best)) {
+                best = v;
+            }
+        }
+        return Ok(best);
+    }
+    if (args.len() != 1) {
+        return Err(arity_error(name, "1", args.len()));
+    }
+    let x = args[0];
+    if (name == "abs") {
+        return Ok(abs(x));
+    }
+    if (name == "ceil") {
+        return Ok(ceil(x));
+    }
+    if (name == "floor") {
+        return Ok(floor(x));
+    }
+    if (name == "round") {
+        return Ok(round_half_away(x));
+    }
+    if (name == "trunc") {
+        return Ok(trunc(x));
+    }
+    if (name == "sqrt") {
+        if (x < 0.0) {
+            return Err("sqrt() of a negative number");
+        }
+        return Ok(sqrt(x));
+    }
+    if (name == "exp") {
+        return Ok(exp(x));
+    }
+    if (name == "ln" or name == "log") {
+        if (x <= 0.0) {
+            return Err(name + "() of a number that is not positive");
+        }
+        if (name == "ln") {
+            return Ok(ln(x));
+        }
+        return Ok(log10(x));
+    }
+    if (name == "sin") {
+        return Ok(sin(x));
+    }
+    if (name == "cos") {
+        return Ok(cos(x));
+    }
+    if (name == "tan") {
+        return Ok(tan(x));
+    }
+    if (name == "atan") {
+        return Ok(atan(x));
+    }
+    return Err("undefined function '" + name + "'");
+}
+
+func call(s: Session, name: string, args: list[Node], locals: dict[string, float], depth: int): Result[float, string] {
+    # if(COND, THEN, ELSE) evaluates only the branch it takes, which is what
+    # lets a user function recurse.
+    if (name == "if") {
+        if (args.len() != 3) {
+            return Err(arity_error(name, "3", args.len()));
+        }
+        let cond = eval_node(s, args[0], locals, depth)?;
+        if (cond != 0.0) {
+            return eval_node(s, args[1], locals, depth);
+        }
+        return eval_node(s, args[2], locals, depth);
+    }
+
+    var values: list[float] = [];
+    for (arg in args) {
+        let v = eval_node(s, arg, locals, depth)?;
+        values.push(v);
+    }
+    if (is_builtin(name)) {
+        return call_builtin(name, values);
+    }
+    if (!s.funcs.containsKey(name)) {
+        return Err("undefined function '" + name + "'");
+    }
+    let f = s.funcs[name];
+    if (values.len() != f.params.len()) {
+        return Err(arity_error(name, str(f.params.len()), values.len()));
+    }
+    if (depth >= MAX_CALL_DEPTH) {
+        return Err("recursion too deep (more than " + str(MAX_CALL_DEPTH) + " nested calls)");
+    }
+    var frame: dict[string, float] = {};
+    var i = 0;
+    while (i < values.len()) {
+        frame[f.params[i]] = values[i];
+        i += 1;
+    }
+    return eval_node(s, f.body, frame, depth + 1);
+}
+
+pub func eval_node(s: Session, node: Node, locals: dict[string, float], depth: int): Result[float, string] {
+    match node {
+        Node.Num(value) => {
+            return Ok(value);
+        },
+        Node.Var(name) => {
+            return lookup(s, name, locals);
+        },
+        Node.Neg(operand) => {
+            let v = eval_node(s, operand, locals, depth)?;
+            return Ok(0.0 - v);
+        },
+        Node.Binary(op, left, right) => {
+            let a = eval_node(s, left, locals, depth)?;
+            let b = eval_node(s, right, locals, depth)?;
+            return binary(op, a, b);
+        },
+        Node.Factorial(operand) => {
+            let v = eval_node(s, operand, locals, depth)?;
+            if (v < 0.0 or !is_whole(v)) {
+                return Err("factorial of a negative or fractional number");
+            }
+            return Ok(factorial(v));
+        },
+        Node.Call(name, args) => {
+            return call(s, name, args, locals, depth);
+        },
+    }
+}
+
+# Evaluates an expression with no local variables.
+pub func evaluate(s: Session, node: Node): Result[float, string] {
+    let none: dict[string, float] = {};
+    return eval_node(s, node, none, 0);
+}
+
+# Runs one statement. Returns the text to print ("" for none).
+func exec_stmt(edits s: Session, stmt: Stmt): Result[string, string] {
+    match stmt {
+        Stmt.Show(expr) => {
+            let v = evaluate(s, expr)?;
+            s.vars["ans"] = v;
+            return Ok(format_number(v, s.precision));
+        },
+        Stmt.Assign(name, value) => {
+            if (is_reserved_name(name)) {
+                return Err("cannot assign to built-in name '" + name + "'");
+            }
+            let v = evaluate(s, value)?;
+            s.vars[name] = v;
+            return Ok("");
+        },
+        Stmt.Define(name, params, body) => {
+            if (is_builtin(name)) {
+                return Err("cannot redefine built-in function '" + name + "'");
+            }
+            s.funcs[name] = UserFunc(params = params, body = body);
+            return Ok("");
+        },
+    }
+}
+
+# Parses and runs one line of input.
+pub func run_line(edits s: Session, line: string): LineResult {
+    var outputs: list[string] = [];
+    let parsed = parse_line(line);
+    if (parsed.error.len() > 0) {
+        return LineResult(outputs = outputs, error = parsed.error, col = parsed.col);
+    }
+    for (stmt in parsed.stmts) {
+        let done = exec_stmt(edits: s, stmt);
+        if (done.is_err()) {
+            return LineResult(outputs = outputs, error = done.unwrap_err(), col = 0);
+        }
+        let text = done.unwrap();
+        if (text.len() > 0) {
+            outputs.push(text);
+        }
+    }
+    return LineResult(outputs = outputs, error = "", col = 0);
+}

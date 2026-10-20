@@ -1,0 +1,22 @@
+# Tasks: calc
+
+- [x] 1. Parse options (`-p`/`--precision`, `--help`, `--version`, `--`, negative-number expressions)
+  - _Requirements: 4.2, 5.4, 5.5_
+- [x] 2. Collect input lines from arguments or standard input
+  - _Requirements: 1.1, 1.2, 1.4_
+- [x] 3. Lexer with columns and a hand-written number parser
+  - _Requirements: 2.1, 5.1_
+- [x] 4. Pratt parser into `Node`/`Stmt` enums, with assignment and definition targets
+  - _Requirements: 2.2, 2.3, 3.1, 3.2, 5.1_
+- [x] 5. Evaluator: variables, constants, `ans`, built-ins, lazy `if`, user functions, recursion limit
+  - _Requirements: 1.3, 2.4, 3.1, 3.2, 3.3, 3.4, 3.5, 5.2_
+- [x] 6. Elementary functions in pure Loup
+  - _Requirements: 2.4, 6.3_
+- [x] 7. Number formatting with a precision
+  - _Requirements: 4.1, 4.2, 4.3, 4.4_
+- [x] 8. Error reporting and exit statuses
+  - _Requirements: 5.1, 5.2, 5.3, 5.4_
+- [x] 9. `make lint` for the Wasm-safe subset; Wasm desktop build
+  - _Requirements: 6.1_
+- [x] 10. Unit tests, end-to-end tests, and `make parity` across the three lanes
+  - _Requirements: all_

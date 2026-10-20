@@ -1,98 +1,116 @@
 @mode(host.dual)
 
-# Command-line parsing. Loup 1.26 has no CLI library, so arguments are
-# parsed by hand into an Options value.
+# Command-line parsing for calc:
 #
-# Grammar: [OPTIONS] COMMAND [OPERANDS...]
-#   Options may appear anywhere before `--`; everything after `--` is an
-#   operand. Value options accept `--name VALUE` and `--name=VALUE`.
+#   calc [OPTION]... [EXPRESSION]...
+#
+# Options come before the first expression; `--` ends them. An argument that
+# starts with `-` followed by a digit, `.` or `(` is an expression (`-2^2`),
+# not an option. Every argument after the options is one line of input.
 
-pub const DEFAULT_GREETING: string = "Hello";
+pub const DEFAULT_PRECISION: int = 12;
+pub const MAX_PRECISION: int = 17;
 
 pub struct Options {
-    pub command: string;
-    pub operands: list[string];
     pub help: bool;
     pub version: bool;
-    pub verbose: bool;
-    pub shout: bool;
-    pub greeting: string;
+    pub precision: int;
+    pub exprs: list[string];
+}
+
+# Whether `arg` starts like a negative number or a parenthesis rather than
+# an option.
+pub func looks_like_expression(arg: string): bool {
+    if (arg.len() < 2 or !arg.startsWith("-")) {
+        return false;
+    }
+    return "0123456789.(".index_of(arg.slice(1, 2)) >= 0;
+}
+
+# The value of a decimal precision argument, or -1 when it is not a whole
+# number from 1 to MAX_PRECISION.
+pub func parse_precision(text: string): int {
+    if (text.len() == 0 or text.len() > 2) {
+        return -1;
+    }
+    var value = 0;
+    for (ch in text) {
+        let digit = "0123456789".index_of(ch);
+        if (digit < 0) {
+            return -1;
+        }
+        value = value * 10 + digit;
+    }
+    if (value < 1 or value > MAX_PRECISION) {
+        return -1;
+    }
+    return value;
 }
 
 pub func parse_args(argv: list[string]): Result[Options, string] {
-    var command = "";
-    var operands: list[string] = [];
     var help = false;
     var version = false;
-    var verbose = false;
-    var shout = false;
-    var greeting = DEFAULT_GREETING;
-    var only_operands = false;
+    var precision = DEFAULT_PRECISION;
+    var exprs: list[string] = [];
+    var options_done = false;
 
     var i = 0;
     while (i < argv.len()) {
         let arg = argv[i];
         i += 1;
 
-        if (only_operands or arg == "-" or !arg.startsWith("-")) {
-            if (command.is_empty()) {
-                command = arg;
-            } else {
-                operands.push(arg);
-            }
+        if (options_done or arg == "-" or !arg.startsWith("-") or looks_like_expression(arg)) {
+            options_done = true;
+            exprs.push(arg);
             continue;
         }
         if (arg == "--") {
-            only_operands = true;
+            options_done = true;
             continue;
         }
 
-        # Split `--name=value` into its name and inline value.
-        var name = arg;
-        var inline_value: Option[string] = None;
-        if (arg.startsWith("--") and arg.contains("=")) {
-            let parts = arg.split("=");
-            name = parts[0];
-            inline_value = Some(parts.slice(1).join("="));
-        }
-
-        if (name == "-g" or name == "--greeting") {
-            match inline_value {
-                Some(v) => { greeting = v; },
-                None => {
-                    if (i >= argv.len()) {
-                        return Err(i"option '{$ name $}' requires a value");
-                    }
-                    greeting = argv[i];
-                    i += 1;
-                },
-            }
-            continue;
-        }
-
-        if (inline_value.is_some()) {
-            return Err(i"option '{$ name $}' does not take a value");
-        }
-        if (name == "-h" or name == "--help") {
+        if (arg == "-h" or arg == "--help") {
             help = true;
-        } else if (name == "-V" or name == "--version") {
-            version = true;
-        } else if (name == "-v" or name == "--verbose") {
-            verbose = true;
-        } else if (name == "--shout") {
-            shout = true;
-        } else {
-            return Err(i"unknown option '{$ name $}'");
+            continue;
         }
+        if (arg == "-V" or arg == "--version") {
+            version = true;
+            continue;
+        }
+
+        # -p N, -pN, --precision N, --precision=N
+        var value = "";
+        var has_value = false;
+        if (arg == "-p" or arg == "--precision") {
+            if (i >= argv.len()) {
+                return Err("option '" + arg + "' requires an argument");
+            }
+            value = argv[i];
+            i += 1;
+            has_value = true;
+        } else if (arg.startsWith("--precision=")) {
+            value = arg.slice(12);
+            has_value = true;
+        } else if (arg.startsWith("-p") and !arg.startsWith("--")) {
+            value = arg.slice(2);
+            has_value = true;
+        }
+        if (has_value) {
+            let p = parse_precision(value);
+            if (p < 0) {
+                return Err("invalid precision '" + value + "' (expected 1 to 17)");
+            }
+            precision = p;
+            continue;
+        }
+
+        return Err("unknown option '" + arg + "'");
     }
 
     return Ok(Options(
-        command = command,
-        operands = operands,
         help = help,
         version = version,
-        verbose = verbose,
-        shout = shout,
-        greeting = greeting,
+        precision = precision,
+        exprs = exprs,
     ));
 }

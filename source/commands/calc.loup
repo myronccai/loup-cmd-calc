@@ -1,0 +1,93 @@
+@mode(host.dual)
+
+# calc: runs every input line through one session and reports the values
+# and the errors in input order.
+
+from appinfo import (APP_NAME, EXIT_OK, EXIT_FAILURE);
+from cli.args import (Options);
+from engine.eval import (Session, LineResult, new_session, run_line);
+
+# One line of output: a value for standard output or an error message for
+# standard error.
+pub struct Entry {
+    pub text: string;
+    pub is_error: bool;
+}
+
+pub struct Transcript {
+    pub entries: list[Entry];
+    pub failed: bool;
+}
+
+# The input lines: each expression argument (split at newlines), or else
+# standard input.
+pub func input_lines(opts: Options): list[string] {
+    var lines: list[string] = [];
+    if (opts.exprs.len() > 0) {
+        for (expr in opts.exprs) {
+            for (line in expr.split("\n")) {
+                lines.push(line);
+            }
+        }
+        return lines;
+    }
+    return split_input(readText("/dev/stdin"));
+}
+
+# Splits text into lines; a final newline does not start another line.
+pub func split_input(text: string): list[string] {
+    var lines: list[string] = [];
+    if (text.len() == 0) {
+        return lines;
+    }
+    for (line in text.split("\n")) {
+        lines.push(line);
+    }
+    if (text.endsWith("\n")) {
+        lines.pop();
+    }
+    return lines;
+}
+
+pub func error_text(line_no: int, r: LineResult): string {
+    var place = str(line_no);
+    if (r.col > 0) {
+        place = place + ":" + str(r.col);
+    }
+    return APP_NAME + ": " + place + ": " + r.error;
+}
+
+# Runs the lines in one session.
+pub func calc_lines(lines: list[string], precision: int): Transcript {
+    var session = new_session(precision);
+    var entries: list[Entry] = [];
+    var failed = false;
+    var line_no = 0;
+    for (line in lines) {
+        line_no += 1;
+        let r = run_line(edits: session, line);
+        for (out in r.outputs) {
+            entries.push(Entry(text = out, is_error = false));
+        }
+        if (r.error.len() > 0) {
+            entries.push(Entry(text = error_text(line_no, r), is_error = true));
+            failed = true;
+        }
+    }
+    return Transcript(entries = entries, failed = failed);
+}
+
+pub func run_calc(opts: Options): int {
+    let t = calc_lines(input_lines(opts), opts.precision);
+    for (entry in t.entries) {
+        if (entry.is_error) {
+            printErr(entry.text);
+        } else {
+            println(entry.text);
+        }
+    }
+    if (t.failed) {
+        return EXIT_FAILURE;
+    }
+    return EXIT_OK;
+}

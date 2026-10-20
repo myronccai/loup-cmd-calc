@@ -1,0 +1,62 @@
+@mode(host.dual)
+
+# The syntax tree. Expressions are a recursive enum; a line of input is a
+# list of statements.
+
+pub enum Node {
+    Num(value: float),
+    Var(name: string),
+    Neg(operand: Node),
+    Binary(op: string, left: Node, right: Node),
+    Factorial(operand: Node),
+    Call(name: string, args: list[Node]),
+}
+
+pub enum Stmt {
+    Show(expr: Node),
+    Assign(name: string, value: Node),
+    Define(name: string, params: list[string], body: Node),
+}
+
+# A fully parenthesised rendering of an expression, used by tests and by
+# error messages.
+pub func show(node: Node): string {
+    match node {
+        Node.Num(value) => {
+            return str(value);
+        },
+        Node.Var(name) => {
+            return name;
+        },
+        Node.Neg(operand) => {
+            return "(-" + show(operand) + ")";
+        },
+        Node.Binary(op, left, right) => {
+            return "(" + show(left) + " " + op + " " + show(right) + ")";
+        },
+        Node.Factorial(operand) => {
+            return "(" + show(operand) + "!)";
+        },
+        Node.Call(name, args) => {
+            var parts: list[string] = [];
+            for (arg in args) {
+                parts.push(show(arg));
+            }
+            return name + "(" + parts.join(", ") + ")";
+        },
+    }
+}
+
+pub func show_stmt(stmt: Stmt): string {
+    match stmt {
+        Stmt.Show(expr) => {
+            return show(expr);
+        },
+        Stmt.Assign(name, value) => {
+            return name + " = " + show(value);
+        },
+        Stmt.Define(name, params, body) => {
+            return name + "(" + params.join(", ") + ") = " + show(body);
+        },
+    }
+}

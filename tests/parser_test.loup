@@ -1,0 +1,75 @@
+@mode(host.dual)
+
+from debug.assert import (expect, expectEq);
+from engine.ast import (show_stmt);
+from engine.parser import (parse_line, infix_left_bp, infix_right_bp, MAX_NESTING);
+
+# The parsed line, fully parenthesised, statements joined by " ; ".
+func tree(line: string): string {
+    let parsed = parse_line(line);
+    if (parsed.error.len() > 0) {
+        return "error " + str(parsed.col) + ": " + parsed.error;
+    }
+    var parts: list[string] = [];
+    for (stmt in parsed.stmts) {
+        parts.push(show_stmt(stmt));
+    }
+    return parts.join(" ; ");
+}
+
+func test_precedence(): void {
+    expectEq(tree("1 + 2 * 3"), "(1 + (2 * 3))", "* over +");
+    expectEq(tree("1 * 2 + 3"), "((1 * 2) + 3)", "left operand");
+    expectEq(tree("1 < 2 + 3"), "(1 < (2 + 3))", "comparison loosest");
+}
+
+func test_associativity(): void {
+    expectEq(tree("1 - 2 - 3"), "((1 - 2) - 3)", "- is left-associative");
+    expectEq(tree("2 ^ 3 ^ 2"), "(2 ^ (3 ^ 2))", "^ is right-associative");
+}
+
+func test_unary_and_postfix(): void {
+    expectEq(tree("-2 ^ 2"), "(-(2 ^ 2))", "^ binds tighter than unary minus");
+    expectEq(tree("2 ^ -1"), "(2 ^ (-1))", "unary minus after ^");
+    expectEq(tree("-3!"), "(-(3!))", "! binds tightest");
+    expectEq(tree("+5"), "5", "unary plus disappears");
+    expectEq(tree("- - 1"), "(-(-1))", "double negation");
+}
+
+func test_calls_and_parentheses(): void {
+    expectEq(tree("max(1, 2 + 3, x)"), "max(1, (2 + 3), x)", "call");
+    expectEq(tree("f()"), "f()", "no arguments");
+    expectEq(tree("(1 + 2) * 3"), "((1 + 2) * 3)", "parentheses");
+}
+
+func test_statements(): void {
+    expectEq(tree("x = 1 + 2"), "x = (1 + 2)", "assignment");
+    expectEq(tree("f(a, b) = a * b"), "f(a, b) = (a * b)", "definition");
+    expectEq(tree("x = 2; x * x;"), "x = 2 ; (x * x)", "two statements");
+    expectEq(tree("; ;"), "", "empty statements");
+}
+
+func test_binding_powers(): void {
+    expectEq(infix_left_bp("+"), 20, "+");
+    expectEq(infix_left_bp("x"), -1, "not an operator");
+    expectEq(infix_right_bp("*"), 31, "left-associative: right bp is higher");
+    expectEq(infix_right_bp("^"), 50, "right-associative: right bp is lower");
+}
+
+func test_syntax_errors(): void {
+    expectEq(tree("1 +"), "error 4: unexpected end of input", "missing operand");
+    expectEq(tree("(1"), "error 3: expected ')' but found end of input", "missing )");
+    expectEq(tree("1 2"), "error 3: unexpected '2'", "two values");
+    expectEq(tree(")"), "error 1: unexpected ')'", "stray )");
+    expectEq(tree("2 = 3"), "error 3: cannot assign to an expression", "bad target");
+    expectEq(tree("f(1) = 2"), "error 6: parameters of 'f' must be names", "bad parameter");
+    expectEq(tree("f(a, a) = 2"), "error 9: duplicate parameter 'a'", "duplicate parameter");
+    expectEq(tree("f(1 2)"), "error 5: expected ',' or ')' but found '2'", "missing comma");
+}
+
+func test_nesting_limit(): void {
+    let deep = "(".repeat(MAX_NESTING) + "1" + ")".repeat(MAX_NESTING);
+    expect(tree(deep).startsWith("error"), "too deep");
+    let ok = "(".repeat(MAX_NESTING - 1) + "1" + ")".repeat(MAX_NESTING - 1);
+    expectEq(tree(ok), "1", "just deep enough");
+}

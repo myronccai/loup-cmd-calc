@@ -1,0 +1,4 @@
+--- stderr
+calc: unknown option '-q'
+Try 'calc --help' for more information.
+--- exit status 2

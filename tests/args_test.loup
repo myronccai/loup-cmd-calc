@@ -1,30 +1,20 @@
 @mode(host.dual)
 
 from debug.assert import (expect, expectEq);
-from cli.args import (parse_args, DEFAULT_GREETING);
+from cli.args import (parse_args, parse_precision, looks_like_expression, DEFAULT_PRECISION);
 
 func test_no_arguments(): void {
     let none: list[string] = [];
     let opts = parse_args(none).unwrap();
-    expectEq(opts.command, "", "no command");
-    expectEq(opts.operands.len(), 0, "no operands");
-    expectEq(opts.greeting, DEFAULT_GREETING, "default greeting");
-    expect(!opts.help and !opts.version and !opts.verbose and !opts.shout, "no flags set");
+    expectEq(opts.exprs.len(), 0, "no expressions: read standard input");
+    expectEq(opts.precision, DEFAULT_PRECISION, "default precision");
+    expect(!opts.help and !opts.version, "no flags set");
 }
 
-func test_command_and_operands(): void {
-    let opts = parse_args(["hello", "Ann"]).unwrap();
-    expectEq(opts.command, "hello", "command");
-    expectEq(opts.operands.len(), 1, "one operand");
-    expectEq(opts.operands[0], "Ann", "operand");
-}
-
-func test_flags_anywhere(): void {
-    let opts = parse_args(["-v", "hello", "--shout", "Ann"]).unwrap();
-    expect(opts.verbose, "verbose");
-    expect(opts.shout, "shout");
-    expectEq(opts.command, "hello", "command");
-    expectEq(opts.operands[0], "Ann", "operand");
+func test_expressions_in_order(): void {
+    let opts = parse_args(["x = 2", "x * 3"]).unwrap();
+    expectEq(opts.exprs.len(), 2, "two expressions");
+    expectEq(opts.exprs[1], "x * 3", "second expression");
 }
 
 func test_help_and_version(): void {
@@ -34,31 +24,47 @@ func test_help_and_version(): void {
     expect(parse_args(["-V"]).unwrap().version, "-V");
 }
 
-func test_value_option_forms(): void {
-    expectEq(parse_args(["-g", "Hi"]).unwrap().greeting, "Hi", "-g VALUE");
-    expectEq(parse_args(["--greeting", "Hi"]).unwrap().greeting, "Hi", "--greeting VALUE");
-    expectEq(parse_args(["--greeting=a=b"]).unwrap().greeting, "a=b", "--greeting=VALUE keeps '='");
+func test_precision_forms(): void {
+    expectEq(parse_args(["-p", "5", "1"]).unwrap().precision, 5, "-p N");
+    expectEq(parse_args(["-p7", "1"]).unwrap().precision, 7, "-pN");
+    expectEq(parse_args(["--precision", "3", "1"]).unwrap().precision, 3, "--precision N");
+    expectEq(parse_args(["--precision=17", "1"]).unwrap().precision, 17, "--precision=N");
+}
+
+func test_precision_range(): void {
+    expectEq(parse_precision("1"), 1, "lowest");
+    expectEq(parse_precision("17"), 17, "highest");
+    expectEq(parse_precision("0"), -1, "zero");
+    expectEq(parse_precision("18"), -1, "too many digits");
+    expectEq(parse_precision("x"), -1, "not a number");
+    expectEq(parse_precision(""), -1, "empty");
+    expect(parse_args(["-p", "99", "1"]).is_err(), "out of range");
+    expect(parse_args(["-p"]).is_err(), "missing value");
+}
+
+func test_negative_numbers_are_expressions(): void {
+    expect(looks_like_expression("-2^2"), "-digit");
+    expect(looks_like_expression("-.5"), "-.");
+    expect(looks_like_expression("-(1)"), "-(");
+    expect(!looks_like_expression("-x"), "-letter is an option");
+    let opts = parse_args(["-1 + 2"]).unwrap();
+    expectEq(opts.exprs[0], "-1 + 2", "kept as an expression");
 }
 
 func test_double_dash_ends_options(): void {
-    let opts = parse_args(["hello", "--", "--shout"]).unwrap();
-    expect(!opts.shout, "--shout after -- is an operand");
-    expectEq(opts.operands[0], "--shout", "operand");
+    let opts = parse_args(["--", "-x", "--help"]).unwrap();
+    expect(!opts.help, "--help after -- is an expression");
+    expectEq(opts.exprs.len(), 2, "both kept");
+    expectEq(opts.exprs[0], "-x", "first expression");
 }
 
-func test_lone_dash_is_operand(): void {
-    let opts = parse_args(["hello", "-"]).unwrap();
-    expectEq(opts.operands[0], "-", "operand");
+func test_options_stop_at_first_expression(): void {
+    let opts = parse_args(["1", "-p", "3"]).unwrap();
+    expectEq(opts.precision, DEFAULT_PRECISION, "-p after an expression is an expression");
+    expectEq(opts.exprs.len(), 3, "three expressions");
 }
 
 func test_unknown_option(): void {
-    expectEq(parse_args(["--nope"]).unwrap_err(), "unknown option '--nope'", "error message");
-}
-
-func test_missing_value(): void {
-    expectEq(parse_args(["-g"]).unwrap_err(), "option '-g' requires a value", "error message");
-}
-
-func test_flag_with_value(): void {
-    expectEq(parse_args(["--shout=1"]).unwrap_err(), "option '--shout' does not take a value", "error message");
+    expect(parse_args(["-q"]).is_err(), "-q");
+    expect(parse_args(["--precise=3"]).is_err(), "--precise=3");
 }

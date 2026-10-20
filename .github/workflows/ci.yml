@@ -25,12 +25,21 @@ jobs:
           loup --version
           clang --version
 
-      - name: Check, test and build
+      # Lint, check, unit tests, native build, end-to-end tests, and parity
+      # of the interpreted, native and Wasm lanes.
+      - name: Check, test, build and compare lanes
         run: make ci
 
-      - name: Upload binary
+      - name: Upload native binary
         uses: actions/upload-artifact@v4
         with:
-          name: myapp-linux-x86_64
-          path: build/myapp
+          name: calc-linux-x86_64
+          path: build/calc
+          if-no-files-found: error
+
+      - name: Upload Wasm desktop package
+        uses: actions/upload-artifact@v4
+        with:
+          name: calc-wasm-desktop-linux-x86_64
+          path: build/pkg
           if-no-files-found: error

@@ -1,0 +1,73 @@
+@mode(host.dual)
+
+from debug.assert import (expect, expectEq);
+from engine.lexer import (Token, TokenKind, tokenize, number_value);
+
+func kinds(line: string): string {
+    var parts: list[string] = [];
+    for (t in tokenize(line).tokens) {
+        let name = match t.kind {
+            TokenKind.Number => "num",
+            TokenKind.Name => "name",
+            TokenKind.Op => "op",
+            TokenKind.LParen => "(",
+            TokenKind.RParen => ")",
+            TokenKind.Comma => ",",
+            TokenKind.Assign => "=",
+            TokenKind.Semi => ";",
+            TokenKind.End => "end",
+        };
+        parts.push(name);
+    }
+    return parts.join(" ");
+}
+
+func test_token_kinds(): void {
+    expectEq(kinds("f(x, 2) = x ^ 2; y"), "name ( name , num ) = name op num ; name end", "kinds");
+    expectEq(kinds(""), "end", "empty line");
+}
+
+func test_two_character_operators(): void {
+    let tokens = tokenize("a<=b!=c==d>=e").tokens;
+    expectEq(tokens[1].text, "<=", "<=");
+    expectEq(tokens[3].text, "!=", "!=");
+    expectEq(tokens[5].text, "==", "==");
+    expectEq(tokens[7].text, ">=", ">=");
+}
+
+func test_columns(): void {
+    let tokens = tokenize("  12 +x").tokens;
+    expectEq(tokens[0].col, 3, "number");
+    expectEq(tokens[1].col, 6, "operator");
+    expectEq(tokens[2].col, 7, "name");
+    expectEq(tokens[3].col, 8, "end");
+}
+
+func test_comment_ends_the_line(): void {
+    expectEq(kinds("1 # 2 + 3"), "num end", "comment");
+}
+
+func test_numbers(): void {
+    expectEq(number_value("42"), 42.0, "integer");
+    expectEq(number_value("2.5"), 2.5, "decimal");
+    expectEq(number_value(".5"), 0.5, "leading point");
+    expectEq(number_value("1."), 1.0, "trailing point");
+    expectEq(number_value("1e3"), 1000.0, "exponent");
+    expectEq(number_value("25E-1"), 2.5, "negative exponent");
+    expectEq(number_value("0.1"), 0.1, "0.1 rounds like the literal");
+    expectEq(number_value("0.000001234"), 0.000001234, "small");
+    expectEq(number_value("1e400") > 1e308, true, "overflow to inf");
+}
+
+func test_exponent_needs_digits(): void {
+    # `2e` is the number 2 followed by the name e.
+    expectEq(kinds("2e"), "num name end", "2e");
+    expectEq(kinds("2e+"), "num name op end", "2e+");
+}
+
+func test_unexpected_character(): void {
+    let lexed = tokenize("1 $ 2");
+    expectEq(lexed.error, "unexpected character '$'", "message");
+    expectEq(lexed.col, 3, "column");
+    expect(tokenize("1 + 2").error.len() == 0, "no error");
+}

@@ -1,28 +1,41 @@
 @mode(host.dual)
 
-from appinfo import (APP_NAME, APP_VERSION, APP_SUMMARY);
-from cli.args import (DEFAULT_GREETING);
+# Help and version text. calc's sources stay in the subset that Wasm builds
+# run correctly, so strings are joined with `+`, not interpolated.
+
+from appinfo import (APP_NAME, APP_VERSION);
 
 pub func usage(): string {
     let lines = [
-        i"usage: {$ APP_NAME $} [OPTIONS] COMMAND [ARGS...]",
+        "usage: " + APP_NAME + " [OPTION]... [EXPRESSION]...",
         "",
-        APP_SUMMARY,
+        "Evaluate each EXPRESSION, or each line of standard input when there is",
+        "none, and print the value of every expression statement.",
         "",
-        "Commands:",
-        "  hello [NAME]          Print a greeting (NAME defaults to 'world')",
-        "  help                  Show this help",
+        "  -p, --precision N  print results with N significant digits (1-17; default 12)",
+        "  -h, --help         display this help and exit",
+        "  -V, --version      output version information and exit",
         "",
-        "Options:",
-        i"  -g, --greeting TEXT   Greeting used by 'hello' (default: {$ DEFAULT_GREETING $})",
-        "      --shout           Print the greeting in upper case",
-        "  -v, --verbose         Print diagnostic messages to stderr",
-        "  -h, --help            Show this help and exit",
-        "  -V, --version         Show the version and exit",
+        "Statements, separated by ';' or newlines ('#' starts a comment):",
+        "  EXPR               print the value of EXPR (also stored in 'ans')",
+        "  NAME = EXPR        set a variable",
+        "  NAME(A, B) = EXPR  define a function of the parameters A and B",
+        "",
+        "Operators, loosest first: == != < <= > >= (1 or 0), + -, * / %,",
+        "unary - +, ^ (power, right-associative), ! (factorial).",
+        "Constants: pi, e, ans.",
+        "Functions: abs ceil floor round trunc sqrt exp ln log sin cos tan atan",
+        "  min(A, B, ...) max(A, B, ...) if(COND, THEN, ELSE)",
+        "",
+        "An argument that starts with '-' and a digit, '.' or '(' is an expression;",
+        "write '--' before any other expression that starts with '-'.",
+        "",
+        "Exit status: 0 if every statement succeeded, 1 if any failed, 2 on a",
+        "usage error.",
     ];
     return lines.join("\n");
 }
 
 pub func version_line(): string {
-    return i"{$ APP_NAME $} {$ APP_VERSION $}";
+    return APP_NAME + " (loup-cmd-" + APP_NAME + ") " + APP_VERSION;
 }

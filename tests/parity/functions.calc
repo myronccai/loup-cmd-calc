@@ -1,0 +1,33 @@
+# Built-in functions.
+sqrt(16); sqrt(2)
+abs(-3.5); abs(2)
+floor(2.7); floor(-2.7); ceil(2.1); ceil(-2.1)
+round(2.5); round(-2.5); round(2.49); trunc(-2.9)
+exp(0); exp(1); exp(-1); exp(10)
+ln(1); ln(e); ln(10); ln(0.5)
+log(1000); log(2)
+sin(0); sin(pi / 6); sin(pi / 2); sin(-1); sin(100)
+cos(0); cos(pi / 3); cos(pi); cos(2)
+tan(pi / 4); tan(1)
+atan(0); atan(1); atan(-1); atan(10); atan(1e10)
+2 ^ 0.5; 10 ^ -1.5; 1.0001 ^ 10000
+min(3, 1, 2); max(3, 1, 2); min(7)
+if(1, 10, 20); if(0, 10, 20); if(2 > 1, 1 / 1, 1 / 0)
+# User-defined functions.
+f(x) = x ^ 2 + 1
+f(3); f(f(2))
+hyp(a, b) = sqrt(a ^ 2 + b ^ 2)
+hyp(3, 4)
+fact(n) = if(n <= 1, 1, n * fact(n - 1))
+fact(10); fact(20)
+fib(n) = if(n < 2, n, fib(n - 1) + fib(n - 2))
+fib(15)
+k = 2
+scale(x) = k * x
+scale(5)
+k = 10
+scale(5)
+x = 100
+f(x); x
+answer() = 42
+answer()

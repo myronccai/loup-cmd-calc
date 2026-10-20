@@ -1,0 +1,33 @@
+1
+2
+--- stderr
+calc: 2: division by zero
+calc: 3: division by zero
+calc: 4: division by zero
+calc: 5: sqrt() of a negative number
+calc: 6: ln() of a number that is not positive
+calc: 7: log() of a number that is not positive
+calc: 8: fractional power of a negative number
+calc: 9: factorial of a negative or fractional number
+calc: 10: factorial of a negative or fractional number
+calc: 11: undefined variable 'undefined_var'
+calc: 12: undefined function 'nosuch'
+calc: 13: sin() takes 1 argument, got 2
+calc: 14: min() takes at least 1 argument, got 0
+calc: 15: if() takes 3 arguments, got 2
+calc: 17: g() takes 1 argument, got 2
+calc: 19: recursion too deep (more than 200 nested calls)
+calc: 20: cannot assign to built-in name 'pi'
+calc: 21: cannot assign to built-in name 'ans'
+calc: 22: cannot redefine built-in function 'sin'
+calc: 23:4: unexpected end of input
+calc: 24:7: expected ')' but found end of input
+calc: 25:3: unexpected '2'
+calc: 26:3: unexpected character '$'
+calc: 27:6: parameters of 'f' must be names
+calc: 28:9: duplicate parameter 'a'
+calc: 29:3: cannot assign to an expression
+calc: 30:9: expected ',' or ')' but found end of input
+calc: 31:1: unexpected ')'
+calc: 32: division by zero
+--- exit status 1

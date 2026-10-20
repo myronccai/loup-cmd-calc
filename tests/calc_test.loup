@@ -1,0 +1,41 @@
+@mode(host.dual)
+
+from debug.assert import (expect, expectEq);
+from engine.eval import (LineResult);
+from commands.calc import (calc_lines, split_input, error_text);
+
+func test_split_input(): void {
+    expectEq(split_input("").len(), 0, "empty input");
+    expectEq(split_input("1\n2\n").len(), 2, "final newline");
+    expectEq(split_input("1\n2").len(), 2, "no final newline");
+    expectEq(split_input("\n").len(), 1, "one empty line");
+}
+
+func test_transcript_order(): void {
+    let t = calc_lines(["1", "1 / 0", "", "# comment", "2"], 12);
+    expectEq(t.entries.len(), 3, "two values and one error");
+    expectEq(t.entries[0].text, "1", "first value");
+    expect(t.entries[1].is_error, "error in order");
+    expectEq(t.entries[1].text, "calc: 2: division by zero", "error text");
+    expectEq(t.entries[2].text, "2", "line after the error still runs");
+    expect(t.failed, "failed");
+}
+
+func test_session_spans_lines(): void {
+    let t = calc_lines(["x = 2", "f(y) = x * y", "f(21)"], 12);
+    expectEq(t.entries.len(), 1, "one value");
+    expectEq(t.entries[0].text, "42", "value");
+    expect(!t.failed, "no failure");
+}
+
+func test_error_text(): void {
+    let syntax = LineResult(outputs = [], error = "unexpected ')'", col = 4);
+    expectEq(error_text(3, syntax), "calc: 3:4: unexpected ')'", "with column");
+    let runtime = LineResult(outputs = [], error = "division by zero", col = 0);
+    expectEq(error_text(7, runtime), "calc: 7: division by zero", "without column");
+}
+
+func test_precision_is_used(): void {
+    let t = calc_lines(["1 / 3"], 4);
+    expectEq(t.entries[0].text, "0.3333", "4 digits");
+}

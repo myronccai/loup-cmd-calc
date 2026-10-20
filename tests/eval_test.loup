@@ -1,0 +1,110 @@
+@mode(host.dual)
+
+from debug.assert import (expect, expectEq);
+from engine.eval import (Session, LineResult, new_session, run_line, power, binary, call_builtin, is_builtin, MAX_CALL_DEPTH);
+
+# Runs lines in one session; returns the values and errors in order.
+func transcript(lines: list[string]): string {
+    var s = new_session(12);
+    var parts: list[string] = [];
+    for (line in lines) {
+        let r = run_line(edits: s, line);
+        for (out in r.outputs) {
+            parts.push(out);
+        }
+        if (r.error.len() > 0) {
+            parts.push("error: " + r.error);
+        }
+    }
+    return parts.join(" | ");
+}
+
+func test_expressions_print_values(): void {
+    expectEq(transcript(["1 + 2", "2 ^ 10"]), "3 | 1024", "two lines");
+    expectEq(transcript(["1; 2; 3"]), "1 | 2 | 3", "three statements");
+}
+
+func test_assignment_is_silent(): void {
+    expectEq(transcript(["x = 6 * 7", "x / 2"]), "21", "variable");
+}
+
+func test_ans_holds_the_last_value(): void {
+    expectEq(transcript(["ans", "5", "ans * 2", "x = 1", "ans"]), "0 | 5 | 10 | 10", "ans");
+}
+
+func test_constants(): void {
+    expectEq(transcript(["pi", "e"]), "3.14159265359 | 2.71828182846", "pi and e");
+    expectEq(transcript(["pi = 3"]), "error: cannot assign to built-in name 'pi'", "read-only");
+}
+
+func test_user_functions(): void {
+    expectEq(transcript(["f(x) = x ^ 2 + 1", "f(3)", "f(f(1))"]), "10 | 5", "f");
+    expectEq(transcript(["avg(a, b) = (a + b) / 2", "avg(3, 4)"]), "3.5", "two parameters");
+    expectEq(transcript(["k() = 7", "k() * 2"]), "14", "no parameters");
+}
+
+func test_parameters_shadow_variables(): void {
+    expectEq(transcript(["x = 100", "f(x) = x + 1", "f(1)", "x"]), "2 | 100", "shadowing");
+}
+
+func test_globals_are_read_at_call_time(): void {
+    expectEq(transcript(["k = 2", "f(x) = k * x", "f(5)", "k = 10", "f(5)"]), "10 | 50", "late binding");
+}
+
+func test_recursion_with_if(): void {
+    let lines = ["fact(n) = if(n <= 1, 1, n * fact(n - 1))", "fact(5)", "fact(10)"];
+    expectEq(transcript(lines), "120 | 3628800", "factorial");
+}
+
+func test_recursion_limit(): void {
+    let lines = ["down(n) = if(n <= 0, 0, down(n - 1))", "down(" + str(MAX_CALL_DEPTH + 5) + ")"];
+    expectEq(transcript(lines), "error: recursion too deep (more than 200 nested calls)", "limit");
+}
+
+func test_if_is_lazy(): void {
+    expectEq(transcript(["if(1, 2, 1 / 0)", "if(0, 1 / 0, 3)"]), "2 | 3", "untaken branch not evaluated");
+}
+
+func test_errors_stop_the_line(): void {
+    expectEq(transcript(["1; 2 / 0; 3", "4"]), "1 | error: division by zero | 4", "rest of line skipped");
+}
+
+func test_evaluation_errors(): void {
+    expectEq(transcript(["y + 1"]), "error: undefined variable 'y'", "undefined variable");
+    expectEq(transcript(["g(1)"]), "error: undefined function 'g'", "undefined function");
+    expectEq(transcript(["sin(1, 2)"]), "error: sin() takes 1 argument, got 2", "arity");
+    expectEq(transcript(["f(a) = a", "f()"]), "error: f() takes 1 argument, got 0", "user arity");
+    expectEq(transcript(["sin(x) = x"]), "error: cannot redefine built-in function 'sin'", "built-in");
+    expectEq(transcript(["2.5!"]), "error: factorial of a negative or fractional number", "factorial");
+}
+
+func test_syntax_error_reports_column(): void {
+    var s = new_session(12);
+    let r = run_line(edits: s, "1 + * 2");
+    expectEq(r.error, "unexpected '*'", "message");
+    expectEq(r.col, 5, "column");
+}
+
+func test_power(): void {
+    expectEq(power(2.0, 10.0).unwrap(), 1024.0, "whole exponent");
+    expectEq(power(2.0, -2.0).unwrap(), 0.25, "negative exponent");
+    expectEq(power(-2.0, 3.0).unwrap(), -8.0, "negative base, whole exponent");
+    expectEq(power(0.0, 0.0).unwrap(), 1.0, "0^0");
+    expectEq(power(0.0, -1.0).unwrap_err(), "division by zero", "0^-1");
+    expectEq(power(-8.0, 0.5).unwrap_err(), "fractional power of a negative number", "(-8)^0.5");
+}
+
+func test_binary(): void {
+    expectEq(binary("%", 7.5, 2.0).unwrap(), 1.5, "remainder");
+    expectEq(binary("/", 1.0, 0.0).unwrap_err(), "division by zero", "1/0");
+    expectEq(binary("<=", 2.0, 2.0).unwrap(), 1.0, "true is 1");
+    expectEq(binary("!=", 2.0, 2.0).unwrap(), 0.0, "false is 0");
+}
+
+func test_builtins(): void {
+    expect(is_builtin("sqrt") and is_builtin("if") and !is_builtin("sq"), "names");
+    expectEq(call_builtin("max", [1.0, 5.0, 3.0]).unwrap(), 5.0, "max");
+    expectEq(call_builtin("min", [1.0, 5.0, -3.0]).unwrap(), -3.0, "min");
+    expectEq(call_builtin("sqrt", [-1.0]).unwrap_err(), "sqrt() of a negative number", "sqrt domain");
+    expectEq(call_builtin("ln", [0.0]).unwrap_err(), "ln() of a number that is not positive", "ln domain");
+}
