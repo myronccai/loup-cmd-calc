@@ -57,6 +57,9 @@ Prerequisites: Loup 1.26.0 from the release installer (`loup` and
 `loup-bootstrap` on `PATH`, and the Wasm launcher in `bin/launchers/`),
 `make`, and `clang` 17 or later for native builds.
 
+Loup Lite comes from <https://github.com/code-craft-ai-company/loup-releases>;
+[README.md](README.md#installing-loup-lite) has the install commands.
+
 | Task | Command | Notes |
 |------|---------|-------|
 | Run from source | `make run ARGS="'2^10' 'x = 3; x * x'"` | `loup run source/main.loup -- ARGS` |
