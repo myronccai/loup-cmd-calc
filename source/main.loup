@@ -1,7 +1,15 @@
 @mode(host.dual)
 
-# Entry point. Keep this file thin: all behaviour lives in cli.app.run so
-# that tests can call it with an argument list.
+# calc: entry point. Keep this file thin: all behaviour lives in
+# cli.app.run so that tests can call it with an argument list.
+#
+# Runtime: host.dual. main() gets the command line from runtime.args(). The
+# same source runs in three lanes: `make run` interprets it with
+# `loup run source/main.loup -- ARGS`, `make build` compiles it with the
+# rest of source/ into the native binary build/calc, and `make wasm` has
+# Stage0 (`loup-bootstrap build --target desktop`) compile it into the Wasm
+# desktop package build/pkg, run as `build/pkg/bin/main -- ARGS`.
+# `make parity` runs one corpus through all three and compares the output.
 
 from cli.app import (run);
 

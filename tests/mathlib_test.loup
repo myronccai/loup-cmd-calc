@@ -1,7 +1,13 @@
 @mode(host.dual)
 
-# The elementary functions agree with the correctly rounded values to within
-# a few units in the last place.
+# Unit tests for calc's elementary functions (engine.mathlib): each agrees
+# with the correctly rounded value to within a few units in the last place.
+#
+# Runtime: host.dual, run by the test runner: `make test` interprets this
+# file with Stage0 (`loup-bootstrap test --no-parallel`, source/ on
+# LOUPPATH), one test per `func test_*()`. It is not part of the native
+# binary or the Wasm package. `make parity` checks that the native and Wasm
+# lanes print the same digits.
 
 from debug.assert import (expect, expectEq);
 from engine.mathlib import (PI, E, exp, ln, log10, sin, cos, tan, atan, pow_int, factorial, round_half_away, trunc, is_whole, is_nan, is_inf);

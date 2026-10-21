@@ -1,5 +1,13 @@
 @mode(host.dual)
 
+# Unit tests for calc's lexer (engine.lexer): token kinds, two-character
+# operators, columns, comments, number literals and lexical errors.
+#
+# Runtime: host.dual, run by the test runner: `make test` interprets this
+# file with Stage0 (`loup-bootstrap test --no-parallel`, source/ on
+# LOUPPATH), one test per `func test_*()`. It is not part of the native
+# binary or the Wasm package.
+
 from debug.assert import (expect, expectEq);
 from engine.lexer import (Token, TokenKind, tokenize, number_value);
 

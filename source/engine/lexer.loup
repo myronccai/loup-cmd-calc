@@ -1,7 +1,18 @@
 @mode(host.dual)
 
-# The lexer: one line of input to a list of tokens. A `#` starts a comment
-# that runs to the end of the line.
+# calc's lexer: one line of input to a list of tokens. A `#` starts a
+# comment that runs to the end of the line.
+#
+# Runtime: host.dual. Compiled into the native binary build/calc by
+# `make build` and into the Wasm desktop package build/pkg by `make wasm`;
+# `loup run source/main.loup` interprets the same code. `make parity` checks
+# that the three lanes print the same results.
+#
+# Structure: the token types, character classes, number_value (the value of
+# a decimal literal, computed here because system.text's float parser does
+# not link natively and traps in Wasm), then tokenize: one left-to-right
+# pass that takes the longest token at each position and ends the list with
+# an End token one column past the line.
 
 pub enum TokenKind {
     Number,
@@ -123,6 +134,8 @@ pub func number_value(text: string): float {
 }
 
 pub func tokenize(line: string): Lexed {
+    # The line as one-character strings, so the scanner can look ahead and
+    # cut token text by index.
     var chars: list[string] = [];
     for (ch in line) {
         chars.push(ch);
@@ -141,7 +154,8 @@ pub func tokenize(line: string): Lexed {
             break;
         }
 
-        # Numbers: digits[.digits][e[+-]digits], or .digits
+        # Numbers: digits[.digits][e[+-]digits], or .digits. An `e` with no
+        # digits after it is not part of the number: `2e` is 2 and the name e.
         let next_is_digit = i + 1 < n and is_digit(chars[i + 1]);
         if (is_digit(ch) or (ch == "." and next_is_digit)) {
             var j = i;
@@ -182,6 +196,8 @@ pub func tokenize(line: string): Lexed {
             continue;
         }
 
+        # Two-character operators before one-character ones, so that `<=` is
+        # not read as `<` followed by `=`.
         let pair = if (i + 1 < n) { ch + chars[i + 1] } else { ch };
         if (pair == "==" or pair == "!=" or pair == "<=" or pair == ">=") {
             tokens.push(token(TokenKind.Op, pair, col));

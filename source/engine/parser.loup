@@ -1,8 +1,16 @@
 @mode(host.dual)
 
-# A Pratt parser (top-down operator precedence). Each operator has a binding
-# power; parse_expr(min_bp) keeps folding operators into the left operand
-# while the next operator binds at least as tightly as min_bp.
+# calc's parser: one line of tokens to a list of statements, by a Pratt
+# parser (top-down operator precedence).
+#
+# Runtime: host.dual. Compiled into the native binary build/calc by
+# `make build` and into the Wasm desktop package build/pkg by `make wasm`;
+# `loup run source/main.loup` interprets the same code. `make parity` checks
+# that the three lanes print the same results.
+#
+# Each operator has a binding power; parse_expr(min_bp) keeps folding
+# operators into the left operand while the next operator binds at least as
+# tightly as min_bp.
 #
 #   operators           left bp  right bp
 #   == != < <= > >=     10       11        left-associative
@@ -17,6 +25,12 @@
 # Errors are Err(message); the column of the offending token is kept in the
 # parser (error_col), since native builds of Loup 1.26.0 misread a struct
 # carried in Err next to an enum Ok type.
+#
+# Structure: a cursor over the tokens (peek, advance, fail), the binding
+# power tables, the expression parser (parse_prefix for whatever can start
+# an operand, parse_expr for the operator loop), then statements: the target
+# of an assignment is parsed as an expression first and reinterpreted when
+# `=` follows, and parse_line splits the line at `;`.
 
 from engine.lexer import (Token, TokenKind, tokenize);
 from engine.ast import (Node, Stmt);
@@ -40,6 +54,8 @@ pub struct Parsed {
     pub col: int;
 }
 
+# The cursor. advance() never moves past the final End token, so the
+# parser can always peek at one.
 func peek(p: Parser): Token {
     return p.tokens[p.pos];
 }
@@ -147,6 +163,10 @@ func parse_prefix(edits p: Parser): Result[Node, string] {
     return Err(unexpected(edits: p, t));
 }
 
+# The Pratt loop: parse one operand, then fold in operators while they bind
+# at least as tightly as min_bp. A right operand is parsed with the
+# operator's right binding power, which makes `^` right-associative and the
+# others left-associative.
 pub func parse_expr(edits p: Parser, min_bp: int): Result[Node, string] {
     if (p.depth >= MAX_NESTING) {
         return Err(fail(edits: p, peek(p), "expression nested too deeply"));

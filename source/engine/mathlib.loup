@@ -1,12 +1,26 @@
 @mode(host.dual)
 
-# Elementary functions written in plain Loup arithmetic.
+# calc's elementary functions, written in plain Loup arithmetic.
+#
+# Runtime: host.dual. Compiled into the native binary build/calc by
+# `make build` and into the Wasm desktop package build/pkg by `make wasm`;
+# `loup run source/main.loup` interprets the same code. `make parity` checks
+# that the three lanes print the same results.
 #
 # The self-hosted interpreter behind `loup run` has no libm (`exp`, `log`,
 # `sin`, ... from core.math are missing there), so calc computes them itself.
 # Only +, -, *, /, comparisons and core.math's floor are used, which
 # every lane (interpreter, native binary, Wasm) evaluates identically, so the
-# three lanes agree bit for bit.
+# three lanes agree bit for bit. Negation is written `0.0 - x` because unary
+# minus on a variable traps in the Wasm lane.
+#
+# Structure: constants; classification and rounding (is_nan, is_inf,
+# round_half_away, trunc, is_whole); exp (reduce by multiples of ln 2, then
+# a Taylor series); ln (reduce to [sqrt(1/2), sqrt(2)), then the atanh
+# series); sin, cos and tan (reduce to a quadrant and |r| <= pi/4, then a
+# series); atan (reflect and shift into |x| <= tan(pi/8), then a series);
+# pow_int and factorial. Each series stops once a term no longer changes
+# the sum.
 
 from core.math import (floor);
 

@@ -1,5 +1,14 @@
 @mode(host.dual)
 
+# calc: the command-line front end. Parses the arguments, answers --help
+# and --version, and runs the calculator; a usage error is status 2 and an
+# uncaught exception status 1.
+#
+# Runtime: host.dual. Compiled into the native binary build/calc by
+# `make build` and into the Wasm desktop package build/pkg by `make wasm`;
+# `loup run source/main.loup` interprets the same code. `make parity` checks
+# that the three lanes print the same results.
+
 from appinfo import (APP_NAME, EXIT_OK, EXIT_FAILURE, EXIT_USAGE);
 from cli.args import (parse_args);
 from cli.usage import (usage, version_line);

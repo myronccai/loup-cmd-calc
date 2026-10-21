@@ -1,5 +1,14 @@
 @mode(host.dual)
 
+# Unit tests for calc's parser (engine.parser): precedence, associativity,
+# unary and postfix operators, calls, statements, binding powers, syntax
+# errors with their columns, and the nesting limit.
+#
+# Runtime: host.dual, run by the test runner: `make test` interprets this
+# file with Stage0 (`loup-bootstrap test --no-parallel`, source/ on
+# LOUPPATH), one test per `func test_*()`. It is not part of the native
+# binary or the Wasm package.
+
 from debug.assert import (expect, expectEq);
 from engine.ast import (show_stmt);
 from engine.parser import (parse_line, infix_left_bp, infix_right_bp, MAX_NESTING);

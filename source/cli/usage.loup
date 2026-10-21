@@ -1,7 +1,15 @@
 @mode(host.dual)
 
-# Help and version text. calc's sources stay in the subset that Wasm builds
-# run correctly, so strings are joined with `+`, not interpolated.
+# calc: help and version text.
+#
+# Runtime: host.dual. Compiled into the native binary build/calc by
+# `make build` and into the Wasm desktop package build/pkg by `make wasm`;
+# `loup run source/main.loup` interprets the same code. `make parity` checks
+# that the three lanes print the same results.
+#
+# Like all of source/, this file stays in the subset that the Wasm lane runs
+# correctly (`make lint` checks it), so strings are joined with `+`, not
+# interpolated.
 
 from appinfo import (APP_NAME, APP_VERSION);
 

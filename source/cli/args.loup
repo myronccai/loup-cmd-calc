@@ -1,12 +1,18 @@
 @mode(host.dual)
 
-# Command-line parsing for calc:
+# Command-line parsing for calc (`calc [OPTION]... [EXPRESSION]...`): argv
+# to an Options record, or the message of a usage error.
 #
-#   calc [OPTION]... [EXPRESSION]...
+# Runtime: host.dual. Compiled into the native binary build/calc by
+# `make build` and into the Wasm desktop package build/pkg by `make wasm`;
+# `loup run source/main.loup` interprets the same code. `make parity` checks
+# that the three lanes print the same results.
 #
 # Options come before the first expression; `--` ends them. An argument that
 # starts with `-` followed by a digit, `.` or `(` is an expression (`-2^2`),
 # not an option. Every argument after the options is one line of input.
+# parse_precision reads the digits itself: system.text's number parsers do
+# not link in native builds of Loup 1.26.0.
 
 pub const DEFAULT_PRECISION: int = 12;
 pub const MAX_PRECISION: int = 17;

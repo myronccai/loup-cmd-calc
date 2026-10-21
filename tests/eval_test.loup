@@ -1,5 +1,16 @@
 @mode(host.dual)
 
+# Unit tests for calc's evaluator (engine.eval): statements, `ans`,
+# constants, user functions and recursion, lazy if(), errors, and the
+# operator and built-in helpers.
+#
+# Runtime: host.dual, run by the test runner: `make test` interprets this
+# file with Stage0 (`loup-bootstrap test --no-parallel`, source/ on
+# LOUPPATH), one test per `func test_*()`. It is not part of the native
+# binary or the Wasm package. --no-parallel matters here:
+# test_recursion_limit nests 200 interpreted calls, more than a parallel
+# runner thread's stack holds.
+
 from debug.assert import (expect, expectEq);
 from engine.eval import (Session, LineResult, new_session, run_line, power, binary, call_builtin, is_builtin, MAX_CALL_DEPTH);
 

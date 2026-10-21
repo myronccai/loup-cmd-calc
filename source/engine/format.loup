@@ -1,11 +1,20 @@
 @mode(host.dual)
 
-# Number formatting: a result is rounded to a number of significant digits
-# and printed in plain or scientific notation, like printf's %g.
+# calc's number formatting: a result is rounded to a number of significant
+# digits and printed in plain or scientific notation, much like printf's %g.
+#
+# Runtime: host.dual. Compiled into the native binary build/calc by
+# `make build` and into the Wasm desktop package build/pkg by `make wasm`;
+# `loup run source/main.loup` interprets the same code. `make parity` checks
+# that the three lanes print the same results.
 #
 # The digits come from str(x), the shortest decimal that reads back as x,
 # which every lane produces identically; rounding is then done on the
 # decimal digits, so no lane-specific float printing is involved.
+#
+# Structure: to_decimal (x as a digit string and a decimal point position,
+# taken from str(x)), round_decimal (half up, on those digits), then
+# format_number, which handles nan, inf and zero and picks the notation.
 
 from engine.mathlib import (is_nan, is_inf);
 
@@ -124,6 +133,9 @@ pub func format_number(x: float, precision: int): string {
     let n = digits.len();
     let exp10 = d.point - 1;
 
+    # Scientific notation when the exponent is below -6 (%g switches below
+    # -4) or at least the precision; otherwise plain digits with the point
+    # placed, padded with zeros on either side.
     if (exp10 < 0 - 6 or exp10 >= precision) {
         var text = digits.slice(0, 1);
         if (n > 1) {

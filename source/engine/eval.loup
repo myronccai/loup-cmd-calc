@@ -1,8 +1,19 @@
 @mode(host.dual)
 
-# The evaluator: walks the syntax tree with a session that holds variables
-# and user-defined functions. Failures (division by zero, an undefined name,
-# a domain error) are Err values, not exceptions.
+# calc's evaluator: walks the syntax tree with a session that holds
+# variables and user-defined functions. Failures (division by zero, an
+# undefined name, a domain error) are Err values, not exceptions.
+#
+# Runtime: host.dual. Compiled into the native binary build/calc by
+# `make build` and into the Wasm desktop package build/pkg by `make wasm`;
+# `loup run source/main.loup` interprets the same code. `make parity` checks
+# that the three lanes print the same results.
+#
+# Structure: the session and per-line result types; name lookup; operators
+# and power(); the built-in functions; call(), which evaluates `if` lazily
+# and runs a user function in a fresh frame of its parameters; eval_node,
+# the tree walk; then statements and run_line, which parses a line and runs
+# its statements until one fails.
 
 from engine.ast import (Node, Stmt);
 from engine.parser import (parse_line);
@@ -40,6 +51,7 @@ pub func new_session(precision: int): Session {
     return Session(precision = precision, vars = vars, funcs = funcs);
 }
 
+# Space-delimited, so that looking up " NAME " matches whole names only.
 const BUILTINS: string = " abs ceil floor round trunc sqrt exp ln log sin cos tan atan min max if ";
 
 pub func is_builtin(name: string): bool {
@@ -50,6 +62,8 @@ func is_reserved_name(name: string): bool {
     return name == "pi" or name == "e" or name == "ans";
 }
 
+# A name is a parameter of the function being called, a constant, or a
+# session variable. Function bodies see variables as they are when called.
 func lookup(s: Session, name: string, locals: dict[string, float]): Result[float, string] {
     if (locals.containsKey(name)) {
         return Ok(locals[name]);
@@ -73,6 +87,8 @@ func truth(b: bool): float {
     return 0.0;
 }
 
+# Whole exponents use repeated squaring, which is exact where it can be and
+# allows a negative base; other exponents go through exp(y * ln(x)).
 pub func power(base: float, exponent: float): Result[float, string] {
     if (is_whole(exponent)) {
         if (base == 0.0 and exponent < 0.0) {
@@ -241,6 +257,8 @@ func call(s: Session, name: string, args: list[Node], locals: dict[string, float
     if (depth >= MAX_CALL_DEPTH) {
         return Err("recursion too deep (more than " + str(MAX_CALL_DEPTH) + " nested calls)");
     }
+    # The new frame holds only the parameters; `depth` counts nested
+    # user-function calls for the MAX_CALL_DEPTH check above.
     var frame: dict[string, float] = {};
     var i = 0;
     while (i < values.len()) {

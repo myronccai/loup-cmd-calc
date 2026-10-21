@@ -1,5 +1,14 @@
 @mode(host.dual)
 
+# Unit tests for calc's number formatting (engine.format): whole numbers,
+# rounding to the precision, scientific notation, nan and inf, and the
+# decimal digits of a float.
+#
+# Runtime: host.dual, run by the test runner: `make test` interprets this
+# file with Stage0 (`loup-bootstrap test --no-parallel`, source/ on
+# LOUPPATH), one test per `func test_*()`. It is not part of the native
+# binary or the Wasm package.
+
 from debug.assert import (expectEq);
 from engine.format import (format_number, to_decimal, round_decimal);
 

@@ -2,6 +2,15 @@
 
 # calc: runs every input line through one session and reports the values
 # and the errors in input order.
+#
+# Runtime: host.dual. Compiled into the native binary build/calc by
+# `make build` and into the Wasm desktop package build/pkg by `make wasm`;
+# `loup run source/main.loup` interprets the same code. `make parity` checks
+# that the three lanes print the same results.
+#
+# Only run_calc prints: calc_lines returns a Transcript (values for standard
+# output, messages for standard error, in input order), so the unit tests
+# check it without capturing output.
 
 from appinfo import (APP_NAME, EXIT_OK, EXIT_FAILURE);
 from cli.args import (Options);

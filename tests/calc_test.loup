@@ -1,5 +1,14 @@
 @mode(host.dual)
 
+# Unit tests for calc's line handling (commands.calc): splitting input into
+# lines, one session across lines, output order, error text with line and
+# column, and the precision option.
+#
+# Runtime: host.dual, run by the test runner: `make test` interprets this
+# file with Stage0 (`loup-bootstrap test --no-parallel`, source/ on
+# LOUPPATH), one test per `func test_*()`. It is not part of the native
+# binary or the Wasm package.
+
 from debug.assert import (expect, expectEq);
 from engine.eval import (LineResult);
 from commands.calc import (calc_lines, split_input, error_text);

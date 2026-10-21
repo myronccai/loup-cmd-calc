@@ -1,7 +1,13 @@
 @mode(host.dual)
 
-# The syntax tree. Expressions are a recursive enum; a line of input is a
-# list of statements.
+# calc's syntax tree. Expressions are a recursive enum (Node); a line of
+# input is a list of statements (Stmt). The parser builds them and the
+# evaluator walks them.
+#
+# Runtime: host.dual. Compiled into the native binary build/calc by
+# `make build` and into the Wasm desktop package build/pkg by `make wasm`;
+# `loup run source/main.loup` interprets the same code. `make parity` checks
+# that the three lanes print the same results.
 
 pub enum Node {
     Num(value: float),
@@ -18,8 +24,10 @@ pub enum Stmt {
     Define(name: string, params: list[string], body: Node),
 }
 
-# A fully parenthesised rendering of an expression, used by tests and by
-# error messages.
+# A fully parenthesised rendering of an expression, used by the parser
+# tests. Every arm returns from a block instead of being the value of a
+# match expression: in native builds of Loup 1.26.0 a match expression whose
+# arm builds a new string returns freed memory.
 pub func show(node: Node): string {
     match node {
         Node.Num(value) => {
