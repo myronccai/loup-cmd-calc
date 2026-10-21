@@ -11,7 +11,7 @@
 
 from debug.assert import (expect, expectEq);
 from engine.ast import (show_stmt);
-from engine.parser import (parse_line, infix_left_bp, infix_right_bp, MAX_NESTING);
+from engine.parser import (parse_line, binding_power, MAX_NESTING);
 
 # The parsed line, fully parenthesised, statements joined by " ; ".
 func tree(line: string): string {
@@ -59,10 +59,21 @@ func test_statements(): void {
 }
 
 func test_binding_powers(): void {
-    expectEq(infix_left_bp("+"), 20, "+");
-    expectEq(infix_left_bp("x"), -1, "not an operator");
-    expectEq(infix_right_bp("*"), 31, "left-associative: right bp is higher");
-    expectEq(infix_right_bp("^"), 50, "right-associative: right bp is lower");
+    let (plus_left, plus_right) = binding_power("+");
+    expectEq(plus_left, 20, "+");
+    expectEq(plus_right, 21, "left-associative: right bp is higher");
+    let (none_left, _) = binding_power("x");
+    expectEq(none_left, -1, "not an operator");
+    let (pow_left, pow_right) = binding_power("^");
+    expect(pow_right < pow_left, "right-associative: right bp is lower");
+    expectEq(binding_power("==").0, 10, "comparisons bind loosest");
+}
+
+func test_call_arguments(): void {
+    expectEq(tree("max(1, 2, 3)"), "max(1, 2, 3)", "three arguments");
+    expectEq(tree("f(1"), "error 4: expected ',' or ')' but found end of input", "unclosed");
+    expectEq(tree("f(1 2)"), "error 5: expected ',' or ')' but found '2'", "missing comma");
+    expectEq(tree("f(1,)"), "error 5: unexpected ')'", "trailing comma");
 }
 
 func test_syntax_errors(): void {

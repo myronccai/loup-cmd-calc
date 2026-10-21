@@ -9,6 +9,7 @@ log(1000); log(2)
 sin(0); sin(pi / 6); sin(pi / 2); sin(-1); sin(100)
 cos(0); cos(pi / 3); cos(pi); cos(2)
 tan(pi / 4); tan(1)
+sin(1e308 * 10); cos(-1e308 * 10)
 atan(0); atan(1); atan(-1); atan(10); atan(1e10)
 2 ^ 0.5; 10 ^ -1.5; 1.0001 ^ 10000
 min(3, 1, 2); max(3, 1, 2); min(7)

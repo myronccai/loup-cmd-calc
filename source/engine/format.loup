@@ -24,12 +24,14 @@ func digit_value(ch: string): int {
     return DIGITS.index_of(ch);
 }
 
-# Decimal digits and exponent of a positive finite x: x = 0.DIGITS * 10^point.
+## Decimal digits and exponent of a positive finite x: x = 0.DIGITS * 10^point.
 pub struct Decimal {
     pub digits: string;
     pub point: int;
 }
 
+## The digits of a positive finite x, from str(x), without leading or
+## trailing zeros.
 pub func to_decimal(x: float): Decimal {
     let text = str(x);
     var mantissa = text;
@@ -71,7 +73,7 @@ pub func to_decimal(x: float): Decimal {
     return Decimal(digits = digits, point = point);
 }
 
-# Rounds the digits to at most `precision` significant digits, half up.
+## Rounds the digits to at most `precision` significant digits, half up.
 pub func round_decimal(d: Decimal, precision: int): Decimal {
     if (d.digits.len() <= precision) {
         return d;
@@ -80,7 +82,6 @@ pub func round_decimal(d: Decimal, precision: int): Decimal {
     for (ch in d.digits.slice(0, precision)) {
         values.push(digit_value(ch));
     }
-    var point = d.point;
     if (digit_value(d.digits.slice(precision, precision + 1)) >= 5) {
         var i = precision - 1;
         var carry = true;
@@ -95,7 +96,7 @@ pub func round_decimal(d: Decimal, precision: int): Decimal {
         }
         if (carry) {
             # 99...9 rounded up: 10...0, one place further left.
-            return Decimal(digits = "1", point = point + 1);
+            return d with (digits = "1", point = d.point + 1);
         }
     }
     var parts: list[string] = [];
@@ -106,9 +107,11 @@ pub func round_decimal(d: Decimal, precision: int): Decimal {
     while (digits.len() > 1 and digits.slice(digits.len() - 1) == "0") {
         digits = digits.slice(0, digits.len() - 1);
     }
-    return Decimal(digits = digits, point = point);
+    # Same decimal point, fewer digits.
+    return d with (digits = digits);
 }
 
+## x rounded to `precision` significant digits, as calc prints it.
 pub func format_number(x: float, precision: int): string {
     if (is_nan(x)) {
         return "nan";

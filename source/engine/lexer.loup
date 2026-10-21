@@ -26,6 +26,8 @@ pub enum TokenKind {
     End,
 }
 
+## One token: its kind, its text, its value when it is a number, and the
+## 1-based column where it starts.
 pub struct Token {
     pub kind: TokenKind;
     pub text: string;
@@ -33,9 +35,9 @@ pub struct Token {
     pub col: int;
 }
 
-# The tokens of a line, or a syntax error at a 1-based column. (A plain
-# struct rather than a Result with a struct error: native builds of Loup
-# 1.26.0 misread a struct inside Err when the Ok type is an enum.)
+## The tokens of a line, or a syntax error at a 1-based column. (A plain
+## struct rather than a Result with a struct error: native builds of Loup
+## 1.26.0 misread a struct inside Err when the Ok type is an enum.)
 pub struct Lexed {
     pub tokens: list[Token];
     pub error: string;
@@ -73,9 +75,9 @@ func power_of_ten(n: int): float {
     return result;
 }
 
-# The value of a decimal literal: up to 18 significant digits are kept as an
-# integer mantissa, which is then scaled by a power of ten. The literal
-# scanner below guarantees the shape `digits[.digits][e[+-]digits]`.
+## The value of a decimal literal: up to 18 significant digits are kept as
+## an integer mantissa, which is then scaled by a power of ten. The literal
+## scanner below guarantees the shape `digits[.digits][e[+-]digits]`.
 pub func number_value(text: string): float {
     var mantissa = 0;
     var kept = 0;
@@ -88,7 +90,7 @@ pub func number_value(text: string): float {
         if (in_exponent) {
             if (ch == "-") {
                 exponent_negative = true;
-            } else if (ch != "+" and exponent < 100000) {
+            } else if (ch != "+" and exponent < 100_000) {
                 exponent = exponent * 10 + DIGITS.index_of(ch);
             }
         } else if (ch == "e" or ch == "E") {
@@ -133,6 +135,7 @@ pub func number_value(text: string): float {
     return value;
 }
 
+## The tokens of one line, ending with an End token.
 pub func tokenize(line: string): Lexed {
     # The line as one-character strings, so the scanner can look ahead and
     # cut token text by index.

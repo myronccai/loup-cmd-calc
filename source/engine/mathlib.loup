@@ -9,10 +9,12 @@
 #
 # The self-hosted interpreter behind `loup run` has no libm (`exp`, `log`,
 # `sin`, ... from core.math are missing there), so calc computes them itself.
-# Only +, -, *, /, comparisons and core.math's floor are used, which
-# every lane (interpreter, native binary, Wasm) evaluates identically, so the
-# three lanes agree bit for bit. Negation is written `0.0 - x` because unary
-# minus on a variable traps in the Wasm lane.
+# Only +, -, *, /, comparisons and core.math's floor (with its INF and NAN
+# constants) are used, which every lane (interpreter, native binary, Wasm)
+# evaluates identically, so the three lanes agree bit for bit. core.math's
+# isNan and isInfinite are host functions that trap in the Wasm lane, so
+# is_nan and is_inf are written here. Negation is written `0.0 - x` because
+# unary minus on a variable traps in the Wasm lane.
 #
 # Structure: constants; classification and rounding (is_nan, is_inf,
 # round_half_away, trunc, is_whole); exp (reduce by multiples of ln 2, then
@@ -22,7 +24,7 @@
 # pow_int and factorial. Each series stops once a term no longer changes
 # the sum.
 
-from core.math import (floor);
+from core.math import (floor, INF, NAN);
 
 pub const PI: float = 3.141592653589793;
 pub const E: float = 2.718281828459045;
@@ -40,11 +42,12 @@ const TAN_PI_8: float = 0.41421356237309503;
 const EXP_MAX: float = 709.782712893384;
 const EXP_MIN: float = 0.0 - 745.2;
 
+## Whether x is not a number (the only value unequal to itself).
 pub func is_nan(x: float): bool {
     return x != x;
 }
 
-# Whether x is +inf or -inf.
+## Whether x is +inf or -inf.
 pub func is_inf(x: float): bool {
     return x == x and x - x != x - x;
 }
@@ -56,7 +59,7 @@ pub func abs(x: float): float {
     return x;
 }
 
-# Nearest whole number, halves away from zero.
+## Nearest whole number, halves away from zero.
 pub func round_half_away(x: float): float {
     if (is_nan(x) or is_inf(x)) {
         return x;
@@ -71,6 +74,7 @@ pub func round_half_away(x: float): float {
     return down;
 }
 
+## x without its fractional part (toward zero).
 pub func trunc(x: float): float {
     if (x < 0.0) {
         return 0.0 - floor(0.0 - x);
@@ -78,6 +82,7 @@ pub func trunc(x: float): float {
     return floor(x);
 }
 
+## Whether x is a finite whole number.
 pub func is_whole(x: float): bool {
     return !is_inf(x) and !is_nan(x) and floor(x) == x;
 }
@@ -97,12 +102,13 @@ func scale2(x: float, k: int): float {
     return v;
 }
 
+## e^x; inf above EXP_MAX and 0 below EXP_MIN.
 pub func exp(x: float): float {
     if (is_nan(x)) {
         return x;
     }
     if (x > EXP_MAX) {
-        return 1.0 / 0.0;
+        return INF;
     }
     if (x < EXP_MIN) {
         return 0.0;
@@ -126,19 +132,21 @@ pub func exp(x: float): float {
     return scale2(sum, k as int);
 }
 
-# Natural logarithm of a positive, finite x.
+## Natural logarithm of a positive, finite x.
 pub func ln(x: float): float {
     if (is_nan(x) or is_inf(x)) {
         return x;
     }
+    const SQRT2: float = 1.4142135623730951;
+    const SQRT_HALF: float = 0.7071067811865476;
     # x = m * 2^k with m in [sqrt(1/2), sqrt(2)).
     var m = x;
     var k = 0;
-    while (m >= 1.4142135623730951) {
+    while (m >= SQRT2) {
         m = m * 0.5;
         k += 1;
     }
-    while (m < 0.7071067811865476) {
+    while (m < SQRT_HALF) {
         m = m * 2.0;
         k -= 1;
     }
@@ -161,6 +169,7 @@ pub func ln(x: float): float {
     return (kf * LN2_HI + (2.0 * sum + kf * LN2_LO));
 }
 
+## Base-10 logarithm of a positive, finite x.
 pub func log10(x: float): float {
     return ln(x) / LN10;
 }
@@ -212,9 +221,10 @@ func quadrant(x: float): int {
     return m as int;
 }
 
+## Sine of x (radians); nan for an infinite x.
 pub func sin(x: float): float {
     if (is_nan(x) or is_inf(x)) {
-        return 0.0 / 0.0;
+        return NAN;
     }
     let r = reduce_quadrant(x);
     let q = quadrant(x);
@@ -230,9 +240,10 @@ pub func sin(x: float): float {
     return 0.0 - cos_series(r);
 }
 
+## Cosine of x (radians); nan for an infinite x.
 pub func cos(x: float): float {
     if (is_nan(x) or is_inf(x)) {
-        return 0.0 / 0.0;
+        return NAN;
     }
     let r = reduce_quadrant(x);
     let q = quadrant(x);
@@ -248,6 +259,7 @@ pub func cos(x: float): float {
     return sin_series(r);
 }
 
+## Tangent of x (radians).
 pub func tan(x: float): float {
     return sin(x) / cos(x);
 }
@@ -272,6 +284,7 @@ func atan_series(x: float): float {
     return sum;
 }
 
+## Arctangent of x, in (-pi/2, pi/2).
 pub func atan(x: float): float {
     if (is_nan(x)) {
         return x;
@@ -291,7 +304,7 @@ pub func atan(x: float): float {
     return atan_series(x);
 }
 
-# base^n for a whole exponent, by repeated squaring.
+## base^n for a whole exponent, by repeated squaring.
 pub func pow_int(base: float, n: float): float {
     if (n < 0.0) {
         return 1.0 / pow_int(base, 0.0 - n);
@@ -312,10 +325,10 @@ pub func pow_int(base: float, n: float): float {
     return result;
 }
 
-# n! for a whole n from 0; inf past 170!.
+## n! for a whole n from 0; inf past 170!.
 pub func factorial(n: float): float {
     if (n > 170.0) {
-        return 1.0 / 0.0;
+        return INF;
     }
     var result = 1.0;
     var k = 2.0;

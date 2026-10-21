@@ -14,6 +14,14 @@
 from debug.assert import (expect, expectEq);
 from engine.eval import (Session, LineResult, new_session, run_line, power, binary, call_builtin, is_builtin, MAX_CALL_DEPTH);
 
+# prints!(LINE, WANT) checks what one line prints in a fresh session and
+# labels the assertion with the line itself, so a failure names the input.
+macro prints(line, want) {
+    quote {
+        expectEq(transcript([${line}]), ${want}, ${line});
+    }
+}
+
 # Runs lines in one session; returns the values and errors in order.
 func transcript(lines: list[string]): string {
     var s = new_session(12);
@@ -32,7 +40,7 @@ func transcript(lines: list[string]): string {
 
 func test_expressions_print_values(): void {
     expectEq(transcript(["1 + 2", "2 ^ 10"]), "3 | 1024", "two lines");
-    expectEq(transcript(["1; 2; 3"]), "1 | 2 | 3", "three statements");
+    prints!("1; 2; 3", "1 | 2 | 3");
 }
 
 func test_assignment_is_silent(): void {
@@ -45,7 +53,7 @@ func test_ans_holds_the_last_value(): void {
 
 func test_constants(): void {
     expectEq(transcript(["pi", "e"]), "3.14159265359 | 2.71828182846", "pi and e");
-    expectEq(transcript(["pi = 3"]), "error: cannot assign to built-in name 'pi'", "read-only");
+    prints!("pi = 3", "error: cannot assign to built-in name 'pi'");
 }
 
 func test_user_functions(): void {
@@ -81,12 +89,13 @@ func test_errors_stop_the_line(): void {
 }
 
 func test_evaluation_errors(): void {
-    expectEq(transcript(["y + 1"]), "error: undefined variable 'y'", "undefined variable");
-    expectEq(transcript(["g(1)"]), "error: undefined function 'g'", "undefined function");
-    expectEq(transcript(["sin(1, 2)"]), "error: sin() takes 1 argument, got 2", "arity");
+    prints!("y + 1", "error: undefined variable 'y'");
+    prints!("g(1)", "error: undefined function 'g'");
+    prints!("sin(1, 2)", "error: sin() takes 1 argument, got 2");
     expectEq(transcript(["f(a) = a", "f()"]), "error: f() takes 1 argument, got 0", "user arity");
-    expectEq(transcript(["sin(x) = x"]), "error: cannot redefine built-in function 'sin'", "built-in");
-    expectEq(transcript(["2.5!"]), "error: factorial of a negative or fractional number", "factorial");
+    prints!("sin(x) = x", "error: cannot redefine built-in function 'sin'");
+    prints!("2.5!", "error: factorial of a negative or fractional number");
+    prints!("1 / 0; 2", "error: division by zero");
 }
 
 func test_syntax_error_reports_column(): void {

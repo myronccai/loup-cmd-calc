@@ -27,10 +27,10 @@
 # carried in Err next to an enum Ok type.
 #
 # Structure: a cursor over the tokens (peek, advance, fail), the binding
-# power tables, the expression parser (parse_prefix for whatever can start
-# an operand, parse_expr for the operator loop), then statements: the target
-# of an assignment is parsed as an expression first and reinterpreted when
-# `=` follows, and parse_line splits the line at `;`.
+# powers (binding_power), the expression parser (parse_prefix for whatever
+# can start an operand, parse_expr for the operator loop), then statements:
+# the target of an assignment is parsed as an expression first and
+# reinterpreted when `=` follows, and parse_line splits the line at `;`.
 
 from engine.lexer import (Token, TokenKind, tokenize);
 from engine.ast import (Node, Stmt);
@@ -47,7 +47,7 @@ pub struct Parser {
     pub var error_col: int;
 }
 
-# A parsed line, or a syntax error at a 1-based column.
+## A parsed line, or a syntax error at a 1-based column.
 pub struct Parsed {
     pub stmts: list[Stmt];
     pub error: string;
@@ -85,9 +85,15 @@ func unexpected(edits p: Parser, t: Token): string {
     return fail(edits: p, t, "unexpected " + describe(t));
 }
 
-# Left binding power of an infix operator, or -1 when `op` is not one.
-pub func infix_left_bp(op: string): int {
-    return match op {
+## The binding powers (left, right) of an infix operator, as in the table
+## above, or (-1, 0) when `op` is not one, which stops the operator loop.
+## A right power one above the left makes an operator left-associative;
+## `^` has it one below, which makes it right-associative.
+pub func binding_power(op: string): (int, int) {
+    if (op == "^") {
+        return (51, 50);
+    }
+    let left = match op {
         "==" => 10,
         "!=" => 10,
         "<" => 10,
@@ -99,36 +105,29 @@ pub func infix_left_bp(op: string): int {
         "*" => 30,
         "/" => 30,
         "%" => 30,
-        "^" => 51,
         _ => 0 - 1,
     };
+    return (left, left + 1);
 }
 
-pub func infix_right_bp(op: string): int {
-    if (op == "^") {
-        return 50;
-    }
-    return infix_left_bp(op) + 1;
-}
-
+# The arguments of a call, after its `(`: nothing, or one or more
+# expressions separated by commas, then the closing `)`.
 func parse_call_args(edits p: Parser, name: string): Result[Node, string] {
     var args: list[Node] = [];
     if (peek(p).kind == TokenKind.RParen) {
         advance(edits: p);
         return Ok(Node.Call(name = name, args = args));
     }
-    while (true) {
+    var t = peek(p);
+    do {
         let arg = parse_expr(edits: p, 0)?;
         args.push(arg);
-        let t = advance(edits: p);
-        if (t.kind == TokenKind.RParen) {
-            return Ok(Node.Call(name = name, args = args));
-        }
-        if (t.kind != TokenKind.Comma) {
-            return Err(fail(edits: p, t, "expected ',' or ')' but found " + describe(t)));
-        }
+        t = advance(edits: p);
+    } while (t.kind == TokenKind.Comma);
+    if (t.kind != TokenKind.RParen) {
+        return Err(fail(edits: p, t, "expected ',' or ')' but found " + describe(t)));
     }
-    return Err(fail(edits: p, peek(p), "unreachable"));
+    return Ok(Node.Call(name = name, args = args));
 }
 
 # The prefix position: a number, a name, a call, a parenthesised expression
@@ -163,10 +162,10 @@ func parse_prefix(edits p: Parser): Result[Node, string] {
     return Err(unexpected(edits: p, t));
 }
 
-# The Pratt loop: parse one operand, then fold in operators while they bind
-# at least as tightly as min_bp. A right operand is parsed with the
-# operator's right binding power, which makes `^` right-associative and the
-# others left-associative.
+## The Pratt loop: parse one operand, then fold in operators while they
+## bind at least as tightly as min_bp. A right operand is parsed with the
+## operator's right binding power, which makes `^` right-associative and
+## the others left-associative.
 pub func parse_expr(edits p: Parser, min_bp: int): Result[Node, string] {
     if (p.depth >= MAX_NESTING) {
         return Err(fail(edits: p, peek(p), "expression nested too deeply"));
@@ -186,12 +185,12 @@ pub func parse_expr(edits p: Parser, min_bp: int): Result[Node, string] {
             left = Node.Factorial(operand = left);
             continue;
         }
-        let left_bp = infix_left_bp(t.text);
+        let (left_bp, right_bp) = binding_power(t.text);
         if (left_bp < min_bp) {
             break;
         }
         advance(edits: p);
-        let right = parse_expr(edits: p, infix_right_bp(t.text))?;
+        let right = parse_expr(edits: p, right_bp)?;
         left = Node.Binary(op = t.text, left = left, right = right);
     }
     p.depth -= 1;
@@ -240,7 +239,7 @@ func parse_statement(edits p: Parser): Result[Stmt, string] {
     return Ok(Stmt.Show(expr = expr));
 }
 
-# Parses one line: statements separated by `;`.
+## Parses one line: statements separated by `;`.
 pub func parse_line(line: string): Parsed {
     var stmts: list[Stmt] = [];
     let lexed = tokenize(line);

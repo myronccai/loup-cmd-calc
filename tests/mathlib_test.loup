@@ -9,14 +9,12 @@
 # binary or the Wasm package. `make parity` checks that the native and Wasm
 # lanes print the same digits.
 
-from debug.assert import (expect, expectEq);
+from debug.assert import (expect, expectEq, expectNear);
 from engine.mathlib import (PI, E, exp, ln, log10, sin, cos, tan, atan, pow_int, factorial, round_half_away, trunc, is_whole, is_nan, is_inf);
 
+# got is within 4e-16 of want, relative to |want| (absolute below 1): about
+# two units in the last place.
 func near(got: float, want: float, label: string): void {
-    var diff = got - want;
-    if (diff < 0.0) {
-        diff = 0.0 - diff;
-    }
     var scale = want;
     if (scale < 0.0) {
         scale = 0.0 - scale;
@@ -24,7 +22,7 @@ func near(got: float, want: float, label: string): void {
     if (scale < 1.0) {
         scale = 1.0;
     }
-    expect(diff <= 4e-16 * scale, label + ": got " + str(got) + ", want " + str(want));
+    expectNear(got, want, 4e-16 * scale, label);
 }
 
 func test_exp(): void {

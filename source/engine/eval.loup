@@ -9,11 +9,11 @@
 # `loup run source/main.loup` interprets the same code. `make parity` checks
 # that the three lanes print the same results.
 #
-# Structure: the session and per-line result types; name lookup; operators
-# and power(); the built-in functions; call(), which evaluates `if` lazily
-# and runs a user function in a fresh frame of its parameters; eval_node,
-# the tree walk; then statements and run_line, which parses a line and runs
-# its statements until one fails.
+# Structure: the session, frame and per-line result types; name lookup;
+# operators and power(); the built-in functions; call(), which evaluates
+# `if` lazily and runs a user function in a fresh frame of its parameters;
+# eval_node, the tree walk; then statements and run_line, which parses a
+# line and runs its statements until the first one that fails.
 
 from engine.ast import (Node, Stmt);
 from engine.parser import (parse_line);
@@ -21,29 +21,36 @@ from engine.format import (format_number);
 from engine.mathlib import (PI, E, abs, round_half_away, trunc, is_whole, exp, ln, log10, sin, cos, tan, atan, pow_int, factorial);
 from core.math import (floor, ceil, sqrt);
 
-# Nested user-function calls allowed before "recursion too deep".
+## Nested user-function calls allowed before "recursion too deep".
 pub const MAX_CALL_DEPTH: int = 200;
 
+## A user-defined function: its parameter names and its body.
 pub struct UserFunc {
     pub params: list[string];
     pub body: Node;
 }
 
+## What one run of calc remembers from line to line: the precision, the
+## variables (including `ans`) and the user-defined functions.
 pub struct Session {
     pub var precision: int;
     pub var vars: dict[string, float];
     pub var funcs: dict[string, UserFunc];
 }
 
-# The outcome of one line: the printed values, then an error if a statement
-# failed (statements after it on the line are not run). `col` is the column
-# of a syntax error, 0 for an evaluation error.
+## The outcome of one line: the printed values, then an error if a
+## statement failed (statements after it on the line are not run). `col` is
+## the column of a syntax error, 0 for an evaluation error.
 pub struct LineResult {
     pub outputs: list[string];
     pub error: string;
     pub col: int;
 }
 
+## The parameters of the user function being called, and their values.
+pub type Frame = dict[string, float];
+
+## A fresh session: no variables but `ans` (0), no user functions.
 pub func new_session(precision: int): Session {
     var vars: dict[string, float] = {};
     vars["ans"] = 0.0;
@@ -54,6 +61,7 @@ pub func new_session(precision: int): Session {
 # Space-delimited, so that looking up " NAME " matches whole names only.
 const BUILTINS: string = " abs ceil floor round trunc sqrt exp ln log sin cos tan atan min max if ";
 
+## Whether `name` is a built-in function (which a user cannot redefine).
 pub func is_builtin(name: string): bool {
     return BUILTINS.index_of(" " + name + " ") >= 0;
 }
@@ -64,7 +72,7 @@ func is_reserved_name(name: string): bool {
 
 # A name is a parameter of the function being called, a constant, or a
 # session variable. Function bodies see variables as they are when called.
-func lookup(s: Session, name: string, locals: dict[string, float]): Result[float, string] {
+func lookup(s: Session, name: string, locals: Frame): Result[float, string] {
     if (locals.containsKey(name)) {
         return Ok(locals[name]);
     }
@@ -87,8 +95,9 @@ func truth(b: bool): float {
     return 0.0;
 }
 
-# Whole exponents use repeated squaring, which is exact where it can be and
-# allows a negative base; other exponents go through exp(y * ln(x)).
+## base^exponent. Whole exponents use repeated squaring, which is exact
+## where it can be and allows a negative base; other exponents go through
+## exp(y * ln(x)).
 pub func power(base: float, exponent: float): Result[float, string] {
     if (is_whole(exponent)) {
         if (base == 0.0 and exponent < 0.0) {
@@ -108,6 +117,7 @@ pub func power(base: float, exponent: float): Result[float, string] {
     return Ok(exp(exponent * ln(base)));
 }
 
+## A binary operator applied to two values; comparisons give 1 or 0.
 pub func binary(op: string, a: float, b: float): Result[float, string] {
     if (op == "+") {
         return Ok(a + b);
@@ -159,7 +169,7 @@ func arity_error(name: string, expected: string, got: int): string {
     return name + "() takes " + expected + noun + ", got " + str(got);
 }
 
-# A built-in function other than `if`, applied to evaluated arguments.
+## A built-in function other than `if`, applied to evaluated arguments.
 pub func call_builtin(name: string, args: list[float]): Result[float, string] {
     if (name == "min" or name == "max") {
         if (args.len() == 0) {
@@ -225,7 +235,7 @@ pub func call_builtin(name: string, args: list[float]): Result[float, string] {
     return Err("undefined function '" + name + "'");
 }
 
-func call(s: Session, name: string, args: list[Node], locals: dict[string, float], depth: int): Result[float, string] {
+func call(s: Session, name: string, args: list[Node], locals: Frame, depth: int): Result[float, string] {
     # if(COND, THEN, ELSE) evaluates only the branch it takes, which is what
     # lets a user function recurse.
     if (name == "if") {
@@ -259,7 +269,7 @@ func call(s: Session, name: string, args: list[Node], locals: dict[string, float
     }
     # The new frame holds only the parameters; `depth` counts nested
     # user-function calls for the MAX_CALL_DEPTH check above.
-    var frame: dict[string, float] = {};
+    var frame: Frame = {};
     var i = 0;
     while (i < values.len()) {
         frame[f.params[i]] = values[i];
@@ -268,7 +278,9 @@ func call(s: Session, name: string, args: list[Node], locals: dict[string, float
     return eval_node(s, f.body, frame, depth + 1);
 }
 
-pub func eval_node(s: Session, node: Node, locals: dict[string, float], depth: int): Result[float, string] {
+## The value of an expression, with `locals` as the innermost scope and
+## `depth` user-function calls already in progress.
+pub func eval_node(s: Session, node: Node, locals: Frame, depth: int): Result[float, string] {
     match node {
         Node.Num(value) => {
             return Ok(value);
@@ -298,9 +310,9 @@ pub func eval_node(s: Session, node: Node, locals: dict[string, float], depth: i
     }
 }
 
-# Evaluates an expression with no local variables.
+## Evaluates an expression with no local variables.
 pub func evaluate(s: Session, node: Node): Result[float, string] {
-    let none: dict[string, float] = {};
+    let none: Frame = {};
     return eval_node(s, node, none, 0);
 }
 
@@ -330,22 +342,25 @@ func exec_stmt(edits s: Session, stmt: Stmt): Result[string, string] {
     }
 }
 
-# Parses and runs one line of input.
+## Parses and runs one line of input.
 pub func run_line(edits s: Session, line: string): LineResult {
     var outputs: list[string] = [];
     let parsed = parse_line(line);
     if (parsed.error.len() > 0) {
         return LineResult(outputs = outputs, error = parsed.error, col = parsed.col);
     }
-    for (stmt in parsed.stmts) {
-        let done = exec_stmt(edits: s, stmt);
-        if (done.is_err()) {
-            return LineResult(outputs = outputs, error = done.unwrap_err(), col = 0);
+    # `attempt` unwraps each statement's Ok text; the first Err jumps to the
+    # catch with the values printed so far, and the rest of the line is not
+    # run.
+    try {
+        for (stmt in parsed.stmts) {
+            let text = attempt exec_stmt(edits: s, stmt);
+            if (text.len() > 0) {
+                outputs.push(text);
+            }
         }
-        let text = done.unwrap();
-        if (text.len() > 0) {
-            outputs.push(text);
-        }
+    } catch Err(message) {
+        return LineResult(outputs = outputs, error = message, col = 0);
     }
     return LineResult(outputs = outputs, error = "", col = 0);
 }

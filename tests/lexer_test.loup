@@ -8,7 +8,8 @@
 # LOUPPATH), one test per `func test_*()`. It is not part of the native
 # binary or the Wasm package.
 
-from debug.assert import (expect, expectEq);
+from debug.assert import (expect, expectEq, expectNear);
+from system.text import (parseFloat);
 from engine.lexer import (Token, TokenKind, tokenize, number_value);
 
 func kinds(line: string): string {
@@ -65,6 +66,23 @@ func test_numbers(): void {
     expectEq(number_value("0.1"), 0.1, "0.1 rounds like the literal");
     expectEq(number_value("0.000001234"), 0.000001234, "small");
     expectEq(number_value("1e400") > 1e308, true, "overflow to inf");
+}
+
+# system.text's parseFloat is the oracle for number_value. It exists only
+# in the interpreters (it does not link natively and traps in Wasm), which
+# is why calc parses literals itself, but Stage0 runs these tests.
+func test_numbers_agree_with_parse_float(): void {
+    let literals = ["42", "2.5", ".5", "1.", "1e3", "25E-1", "0.1", "3.141592653589793",
+        "123456789012345678", "1234567890123456789012", "9007199254740993",
+        "0.30000000000000004", "1e23", "6.02214076e23", "4.35e-5", "1e-300",
+        "2.2250738585072014e-308", "1e400"];
+    for (text in literals) {
+        expectEq(number_value(text), parseFloat(text).unwrap(), text);
+    }
+    # At the top of the range, scaling by 10^22 at a time rounds more than
+    # once: the result is still within a few units in the last place.
+    let largest = parseFloat("1.7976931348623157e308").unwrap();
+    expectNear(number_value("1.7976931348623157e308"), largest, largest * 1e-15, "largest double");
 }
 
 func test_exponent_needs_digits(): void {
